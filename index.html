@@ -103,6 +103,10 @@ Measure BW
 <input type="text" id="stopFreq" placeholder="Stop Freq (e.g., 1G)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Stop Frequency">
 <button onclick="updateAll()" class="bg-green-600 px-3 py-2 rounded text-sm sm:text-base">Apply Range</button>
 
+<div class="w-px bg-gray-500 h-6"></div>
+<button onclick="loadDemoFile()" class="bg-purple-600 px-3 py-2 rounded text-sm">
+Load Demo
+</button>
 </div>
 
 <!-- Chart Grid -->
@@ -725,6 +729,39 @@ document.getElementById("paramSelect").onchange = () => {
     bwMode.value = (param[1] !== param[2]) ? "il" : "rl"; // auto set mode
     updateAll();
 };
+
+/* ================= LOAD DEMO S5P ================= */
+async function loadDemoFile() {
+    try {
+        const response = await fetch("./demo.s5p");
+        if (!response.ok) {
+            console.warn("Demo file not found.");
+            return;
+        }
+
+        const text = await response.text();
+
+        datasets = []; // clear existing
+        const ds = parseTouchstone(text, "demo.s5p");
+        if (!ds) return;
+
+        datasets.push(ds);
+
+        populateParams();
+
+        let minF = Math.min(...ds.freq);
+        let maxF = Math.max(...ds.freq);
+
+        document.getElementById("startFreq").value = formatFreqForInput(minF);
+        document.getElementById("stopFreq").value = formatFreqForInput(maxF);
+
+        updateAll();
+
+        console.log("Demo S5P loaded.");
+    } catch (err) {
+        console.error("Error loading demo file:", err);
+    }
+}
 
 </script>
 
