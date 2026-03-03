@@ -59,39 +59,6 @@ All processing happens locally in your browser.
 
 ------------------------------------------------------------------------
 
-## 📂 Project Structure
-
-    index.html
-    README.md
-
-No backend, no build system, no dependencies beyond CDN libraries.
-
-------------------------------------------------------------------------
-
-## 🌐 Hosting
-
-You can host this easily using: - GitHub Pages - Netlify - Vercel - Any
-static hosting provider
-
-To host on GitHub Pages:
-
-1.  Create a public repository
-2.  Upload `index.html`
-3.  Enable GitHub Pages in repository settings
-
-------------------------------------------------------------------------
-
-## 🧪 Supported Touchstone Formats
-
--   Frequency units: Hz, kHz, MHz, GHz
--   Data formats:
-    -   RI (Real/Imaginary)
-    -   MA (Magnitude/Angle)
-    -   DB (dB/Angle)
--   Reference impedance (R value parsing supported)
-
-------------------------------------------------------------------------
-
 ## 📊 Bandwidth Measurement
 
 Bandwidth can be measured based on:
@@ -101,33 +68,6 @@ Bandwidth can be measured based on:
 
 Automatic detection switches between RL and IL based on selected
 S-parameter.
-
-------------------------------------------------------------------------
-
-## 🎯 Roadmap
-
--   Marker synchronization across plots
--   Data export (CSV)
--   Save / load sessions
--   Comparison delta mode
--   Smith chart markers
--   Dark/Light theme toggle
-
-------------------------------------------------------------------------
-
-## 💡 Why TouchstoneLab?
-
-Traditional RF tools are expensive and platform-locked.
-
-TouchstoneLab is:
-
--   Free
--   Lightweight
--   Cross-platform
--   Installation-free
--   Fully browser-based
-
-Perfect for quick VNA analysis and engineering review.
 
 ------------------------------------------------------------------------
 
