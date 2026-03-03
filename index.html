@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Touchstone Lab</title>
+
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+
+<style>
+body { background:#0b1120; }
+.card { background:#111827; }
+.plot { width: 100% !important; height: 100% !important; }
+th, td { padding:6px; font-size:12px; text-align:center; }
+th { background:#1f2937; }
+tr:nth-child(even){ background:#0f172a; }
+
+.chart-container {
+  position: relative;
+  cursor: pointer;
+  height: 250px; /* default mobile height */
+}
+
+@media(min-width:640px){ .chart-container{ height: 300px; } }
+@media(min-width:1024px){ .chart-container{ height: 340px; } }
+
+.chart-container.fullscreen {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9999;
+  background: #111827;
+  padding: 10px;
+}
+
+.chart-container .plot {
+  width: 100%;
+  height: 100%;
+}
+
+#controlPanel {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 10000;
+  width: auto;
+  max-width: 95vw;
+  background: rgba(17,24,39,0.95);
+  padding: 12px;
+  border-radius: 8px;
+  flex-wrap: wrap;
+  overflow-x: auto;
+}
+
+</style>
+</head>
+<body class="text-gray-200">
+
+<header class="bg-gray-900 p-4 text-lg sm:text-xl md:text-2xl font-semibold shadow">
+Touchstone Lab
+</header>
+
+<div class="p-4 space-y-4">
+
+<!-- Control Panel -->
+<div class="card p-4 rounded flex flex-wrap gap-2 items-center overflow-x-auto" id="controlPanel">
+
+<input type="file" id="fileInput" multiple class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" accept=".s1p,.s2p,.s3p,.s4p,.s5p">
+
+<div class="w-px bg-gray-500 h-6"></div>
+
+<select id="plotMode" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Plot Mode">
+<option value="single">Single Parameter</option>
+<option value="all">Overlay All</option>
+</select>
+
+<select id="paramSelect" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Parameter Select"></select>
+
+<select id="freqScale" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Frequency Scale">
+<option value="log">Log</option>
+<option value="linear">Linear</option>
+</select>
+
+<div class="w-px bg-gray-500 h-6"></div>
+
+<select id="bwMode" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base">
+  <option value="rl">Return Loss Threshold</option>
+  <option value="il">Insertion Loss Threshold</option>
+</select>
+
+<input type="number" id="rlThreshold" value="10"
+class="bg-gray-800 px-3 py-2 rounded w-full sm:w-24 text-sm sm:text-base"
+title="Return Loss Threshold (dB)">
+
+<button onclick="measureBandwidth()" class="bg-blue-600 px-3 py-2 rounded text-sm sm:text-base">
+Measure BW
+</button>
+
+<div class="w-px bg-gray-500 h-6"></div>
+
+<input type="text" id="startFreq" placeholder="Start Freq (e.g., 1k, 2.5M)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Start Frequency">
+<input type="text" id="stopFreq" placeholder="Stop Freq (e.g., 1G)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Stop Frequency">
+<button onclick="updateAll()" class="bg-green-600 px-3 py-2 rounded text-sm sm:text-base">Apply Range</button>
+
+</div>
+
+<!-- Chart Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
+
+<div class="card p-2">
+  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+    <div id="magPlot" class="plot"></div>
+  </div>
+</div>
+<div class="card p-2">
+  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+    <div id="phasePlot" class="plot"></div>
+  </div>
+</div>
+<div class="card p-2">
+  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+    <div id="rlPlot" class="plot"></div>
+  </div>
+</div>
+<div class="card p-2">
+  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+    <div id="vswrPlot" class="plot"></div>
+  </div>
+</div>
+<div class="card p-2">
+  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+    <div id="gdPlot" class="plot"></div>
+  </div>
+</div>
+<div class="card p-2">
+  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+    <div id="impPlot" class="plot"></div>
+  </div>
+</div>
+<div class="card p-2">
+  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+    <div id="smithPlot" class="plot"></div>
+  </div>
+</div>
+
+<div class="card p-2 rounded">
+  <h2 class="text-lg mb-2">Marker Table</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead>
+        <tr>
+          <th>#</th><th>Freq</th><th>Mag (dB)</th>
+          <th>Phase (deg)</th><th>VSWR</th>
+          <th>GD (ns)</th><th>Delete</th>
+        </tr>
+      </thead>
+      <tbody id="markerTable"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card p-4">
+  <h2 class="text-lg mb-1">Bandwidth Result</h2>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm sm:text-base" id="bwResultTable">
+      <thead>
+        <tr>
+          <th>Dataset</th>
+          <th>Start Freq</th>
+          <th>Stop Freq</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td colspan="3">Not measured</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</div>
+</div>
+
+<script>
+// ================= FULLSCREEN TOGGLE =================
+function toggleFullScreen(container){
+    container.classList.toggle('fullscreen');
+    let plotDiv = container.querySelector('.plot');
+    setTimeout(()=>Plotly.Plots.resize(plotDiv), 50);
+}
+
+// Touch double-tap for mobile
+let lastTap = 0;
+document.querySelectorAll('.chart-container').forEach(container=>{
+    container.addEventListener('touchend', function(e) {
+        let currentTime = new Date().getTime();
+        let tapLength = currentTime - lastTap;
+        if(tapLength < 500 && tapLength > 0) { toggleFullScreen(container); }
+        lastTap = currentTime;
+    });
+});
+
+document.addEventListener("keydown", function(e){
+    if(e.key === "Escape"){
+        document.querySelectorAll(".chart-container.fullscreen").forEach(container=>{
+            container.classList.remove("fullscreen");
+            let plotDiv = container.querySelector(".plot");
+            plotDiv.style.width = "100%";
+            plotDiv.style.height = "100%";
+            setTimeout(() => Plotly.Plots.resize(plotDiv), 50);
+        });
+    }
+});
+
+/* ================= GLOBAL ================= */
+let datasets=[];
+let markers=[];
+let bwMarkers=[];
+
+/* ================= MATH ================= */
+function mag(c){ return Math.hypot(c.re,c.im); }
+function phase(c){ return Math.atan2(c.im,c.re); }
+
+function unwrap(ph){
+	let out=[ph[0]],offset=0;
+	for(let i=1;i<ph.length;i++){
+		let dp=ph[i]-ph[i-1];
+		if(dp>Math.PI) offset-=2*Math.PI;
+		if(dp<-Math.PI) offset+=2*Math.PI;
+		out.push(ph[i]+offset);
+	}
+	return out;
+}
+
+function computeGD(f,ph){
+	let gd=[];
+	for(let i=0;i<f.length;i++){
+		if(i===0)
+			gd.push(-(ph[1]-ph[0])/(2*Math.PI*(f[1]-f[0]))*1e9);
+		else if(i===f.length-1){
+			let n=f.length-1;
+			gd.push(-(ph[n]-ph[n-1])/(2*Math.PI*(f[n]-f[n-1]))*1e9);
+		}else{
+			gd.push(-(ph[i+1]-ph[i-1])/(2*Math.PI*(f[i+1]-f[i-1]))*1e9);
+		}
+	}
+	return gd;
+}
+
+/* ================= PARSER ================= */
+function convertFreq(f,u){
+	u=u.toUpperCase();
+	if(u==="GHZ") return f*1e9;
+	if(u==="MHZ") return f*1e6;
+	if(u==="KHZ") return f*1e3;
+	return f;
+}
+
+function toComplex(a,b,f){
+	if(f==="RI") return {re:a,im:b};
+	let ang=b*Math.PI/180;
+	if(f==="MA") return {re:a*Math.cos(ang),im:a*Math.sin(ang)};
+	if(f==="DB"){
+		let m=Math.pow(10,a/20);
+		return {re:m*Math.cos(ang),im:m*Math.sin(ang)};
+	}
+}
+
+function parseTouchstone(text,name){
+
+    let freq=[],sparams={},format="MA",unit="HZ";
+    let z0=50;
+
+    // 🔹 Detect number of ports from file extension
+    let portMatch = name.match(/\.s(\d+)p$/i);
+    if(!portMatch){
+        console.error("Cannot detect port count from filename");
+        return null;
+    }
+    let ports = parseInt(portMatch[1]);
+
+    let expected = 1 + 2*ports*ports;   // numbers per frequency block
+    let buffer=[];
+
+    text.split(/\r?\n/).forEach(line=>{
+
+        line=line.trim();
+        if(!line) return;
+
+        // Remove full-line comments
+        if(line.startsWith("!")) return;
+
+        // Remove inline comments
+        line = line.split("!")[0].trim();
+        if(!line) return;
+
+        // Header line
+        if(line.startsWith("#")){
+            let p=line.split(/\s+/);
+            unit=p[1].toUpperCase();
+            format=p[3].toUpperCase();
+            if(p.includes("R")) z0=parseFloat(p[p.indexOf("R")+1]);
+            return;
+        }
+
+        // Convert numbers
+        let nums=line.split(/\s+/).map(Number);
+        if(nums.some(n=>isNaN(n))) return;
+
+        // Accumulate numbers (works for single or multiline)
+        buffer.push(...nums);
+
+        // Process full blocks
+        while(buffer.length >= expected){
+
+            let f = buffer[0];
+            freq.push(convertFreq(f,unit));
+
+            let idx=1;
+
+            for(let i=1;i<=ports;i++){
+                for(let j=1;j<=ports;j++){
+                    let key=`S${i}${j}`;
+                    if(!sparams[key]) sparams[key]=[];
+
+                    sparams[key].push(
+                        toComplex(buffer[idx],buffer[idx+1],format)
+                    );
+
+                    idx+=2;
+                }
+            }
+
+            // Remove processed block
+            buffer.splice(0,expected);
+        }
+    });
+
+    console.log("Parsed:", name);
+    console.log("Ports:", ports);
+    console.log("Frequency points:", freq.length);
+
+    return {name,freq,sparams,z0};
+}
+
+/* ================= FILE LOAD ================= */
+function formatFreqForInput(f_Hz) {
+	if(f_Hz >= 1e9) return (f_Hz/1e9)+"G";
+	if(f_Hz >= 1e6) return (f_Hz/1e6)+"M";
+	if(f_Hz >= 1e3) return (f_Hz/1e3)+"k";
+	return f_Hz.toString();
+}
+
+function parseFreqInput(str) {
+	if (!str) return NaN;
+	str = str.trim().toUpperCase();
+	let factor = 1;
+	if (str.endsWith("K")) factor = 1e3;
+	else if (str.endsWith("M")) factor = 1e6;
+	else if (str.endsWith("G")) factor = 1e9;
+
+	let num = parseFloat(str);
+	if (isNaN(num)) return NaN;
+
+	return num * factor;
+}
+
+document.getElementById("fileInput").addEventListener("change", e=>{
+	datasets=[];
+	let files=e.target.files,loaded=0;
+
+	for(let file of files){
+		let r=new FileReader();
+		r.onload=ev=>{
+			let ds = parseTouchstone(ev.target.result,file.name);
+			datasets.push(ds);
+			loaded++;
+			if(loaded===files.length){
+				populateParams();
+				let minF = Math.min(...ds.freq);
+				let maxF = Math.max(...ds.freq);
+
+				document.getElementById("startFreq").value = formatFreqForInput(minF);
+				document.getElementById("stopFreq").value = formatFreqForInput(maxF);
+				updateAll();
+			}
+		};
+		r.readAsText(file);
+	}
+});
+
+function populateParams(){
+	let sel=document.getElementById("paramSelect");
+	sel.innerHTML="";
+	Object.keys(datasets[0].sparams).forEach(k=>{
+		let o=document.createElement("option");
+		o.value=k;
+		o.textContent=k;
+		sel.appendChild(o);
+	});
+}
+
+document.getElementById("plotMode").onchange=updateAll;
+document.getElementById("paramSelect").onchange=updateAll;
+document.getElementById("freqScale").onchange=updateAll;
+
+/* ================= AUTO SCALE ================= */
+function getFreqScale(f_Hz){
+	let maxF = Math.max(...f_Hz);
+	if(maxF>=1e9) return {scale:1e9,unit:"GHz"};
+	if(maxF>=1e6) return {scale:1e6,unit:"MHz"};
+	if(maxF>=1e3) return {scale:1e3,unit:"kHz"};
+	return {scale:1,unit:"Hz"};
+}
+
+/* ================= UPDATE ================= */
+function updateAll(){
+	if(!datasets.length) return;
+
+	let mode=document.getElementById("plotMode").value;
+	let param=document.getElementById("paramSelect").value;
+	let scale=document.getElementById("freqScale").value;
+
+	let fMin = parseFreqInput(document.getElementById("startFreq").value);
+	let fMax = parseFreqInput(document.getElementById("stopFreq").value);
+
+	if (isNaN(fMin)) fMin = -Infinity;
+	if (isNaN(fMax)) fMax = Infinity;
+
+	let magTr=[],phaseTr=[],rlTr=[],vswrTr=[],gdTr=[],impTr=[],smithTr=[];
+
+	datasets.forEach(ds=>{
+		let keys=(mode==="all")?Object.keys(ds.sparams):[param];
+
+		keys.forEach(k=>{
+			let filtered = ds.freq.map((f,i)=>({f, c: ds.sparams[k][i]}))
+				.filter(p => (!isNaN(fMin)?p.f >= fMin:true) && (!isNaN(fMax)?p.f <= fMax:true));
+
+			let f_Hz = filtered.map(p=>p.f);
+			let data_filtered = filtered.map(p=>p.c);
+			let {scale: fScale, unit: fUnit} = getFreqScale(ds.freq);
+			let f_plot = f_Hz.map(v=>v/fScale);
+
+			let label=datasets.length>1?`${ds.name} - ${k}`:k;
+
+			let m=data_filtered.map(c=>mag(c));
+			let magDB=m.map(v=>20*Math.log10(v));
+			let rl=m.map(v=>-20*Math.log10(v));
+			let vs=m.map(v=>{
+				v=Math.min(v,0.999999);
+				return (1+v)/(1-v);
+			});
+
+			let ph=unwrap(data_filtered.map(c=>phase(c)));
+			let gd=computeGD(f_Hz,ph);
+
+			let z=data_filtered.map(c=>{
+				let den=(1-c.re)**2+c.im**2;
+				return {
+					re: ds.z0*((1+c.re)*(1-c.re)+c.im* c.im)/den,
+					im: ds.z0*(2*c.im)/den
+				};
+			});
+
+			magTr.push({x:f_plot,y:magDB,name:label,mode:"lines",hovertemplate:"Freq: %{x:.6f} "+fUnit+"<br>Mag: %{y:.2f} dB<extra></extra>"});
+			phaseTr.push({x:f_plot,y:ph.map(p=>p*180/Math.PI),name:label,mode:"lines",hovertemplate:"Freq: %{x:.6f} "+fUnit+"<br>Phase: %{y:.2f}°<extra></extra>"});
+			rlTr.push({x:f_plot,y:rl,name:label,mode:"lines",hovertemplate:"Freq: %{x:.6f} "+fUnit+"<br>RL: %{y:.2f} dB<extra></extra>"});
+			vswrTr.push({x:f_plot,y:vs,name:label,mode:"lines",hovertemplate:"Freq: %{x:.6f} "+fUnit+"<br>VSWR: %{y:.2f}<extra></extra>"});
+			gdTr.push({x:f_plot,y:gd,name:label,mode:"lines",hovertemplate:"Freq: %{x:.6f} "+fUnit+"<br>GD: %{y:.3f} ns<extra></extra>"});
+			impTr.push({x:f_plot,y:z.map(v=>v.re),name:label+" R",mode:"lines",hovertemplate:"Freq: %{x:.6f} "+fUnit+"<br>Re: %{y:.2f} Ω<extra></extra>"});
+			impTr.push({x:f_plot,y:z.map(v=>v.im),name:label+" X",mode:"lines",hovertemplate:"Freq: %{x:.6f} "+fUnit+"<br>Im: %{y:.2f} Ω<extra></extra>"});
+			smithTr.push({x:data_filtered.map(c=>c.re),y:data_filtered.map(c=>c.im),mode:"lines",name:label,hovertemplate:"Re: %{x:.3f}<br>Im: %{y:.3f}<extra></extra>"});
+		});
+	});
+
+	let {scale: fScale, unit: fUnit} = getFreqScale(datasets[0].freq);
+
+	// Y-axis units for suffix
+	let yUnits = {
+		"magPlot": " dB",
+		"phasePlot": "°",
+		"rlPlot": " dB",
+		"vswrPlot": "",
+		"gdPlot": " ns",
+		"impPlot": " Ω",
+		"smithPlot": ""
+	};
+
+	// Layout function to include Y-axis tick suffix
+	function layoutWithUnit(title, yUnit){
+		return {
+			paper_bgcolor:"#111827",
+			plot_bgcolor:"#111827",
+			font:{color:"#e5e7eb"},
+			xaxis:{type:scale,title:"Frequency ("+fUnit+")"},
+			yaxis:{title:title, ticksuffix: yUnit},
+			legend:{itemclick:"toggleothers"}
+		};
+	}
+
+	Plotly.react("magPlot", magTr, layoutWithUnit("Magnitude", yUnits["magPlot"]));
+	Plotly.react("phasePlot", phaseTr, layoutWithUnit("Phase", yUnits["phasePlot"]));
+	Plotly.react("rlPlot", rlTr, layoutWithUnit("Return Loss", yUnits["rlPlot"]));
+	Plotly.react("vswrPlot", vswrTr, layoutWithUnit("VSWR", yUnits["vswrPlot"]));
+	Plotly.react("gdPlot", gdTr, layoutWithUnit("Group Delay", yUnits["gdPlot"]));
+	Plotly.react("impPlot", impTr, layoutWithUnit("Impedance", yUnits["impPlot"]));
+	Plotly.react("smithPlot", smithTr,{
+		paper_bgcolor:"#111827",
+		plot_bgcolor:"#111827",
+		font:{color:"#e5e7eb"},
+		xaxis:{range:[-1.1,1.1],scaleanchor:"y"},
+		yaxis:{range:[-1.1,1.1]},
+		title:"Smith Chart"
+	});
+
+	attachClick();
+}
+
+/* ================= MARKERS ================= */
+function attachClick(){
+    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
+        let gd=document.getElementById(id);
+
+        // Remove any existing listener to prevent duplicates
+        gd.removeAllListeners && gd.removeAllListeners('plotly_click');
+
+        gd.on('plotly_click', function(data){
+            if(!datasets.length) return;
+            let xHz = data.points[0].x * getFreqScale(datasets[0].freq).scale;
+
+            // Avoid duplicates: check if already exists
+            if(!markers.includes(xHz)) markers.push(xHz);
+
+            updateMarkerTable();
+        });
+    });
+}
+
+// Run once after DOM loaded
+//attachClick();
+
+function updateMarkerTable(){
+	let body=document.getElementById("markerTable");
+	body.innerHTML="";
+	if(!datasets.length) return;
+
+	let ds=datasets[0];
+	let param=document.getElementById("paramSelect").value;
+	let f_Hz = ds.freq;
+	let {scale: fScale, unit: fUnit} = getFreqScale(f_Hz);
+
+	let d=ds.sparams[param];
+	let ph=unwrap(d.map(c=>phase(c)));
+	let gd=computeGD(ds.freq,ph);
+
+	markers.forEach((mf,i)=>{
+		let idx=f_Hz.reduce((best,val,j)=>
+			Math.abs(val-mf)<Math.abs(f_Hz[best]-mf)?j:best,0);
+
+		let mval=mag(d[idx]);
+		let vs=(1+Math.min(mval,0.999999))/(1-Math.min(mval,0.999999));
+
+		let tr=document.createElement("tr");
+		tr.innerHTML=`
+<td>${i+1}</td>
+<td>${(f_Hz[idx]/fScale).toFixed(6)} ${fUnit}</td>
+<td>${(20*Math.log10(mval)).toFixed(3)}</td>
+<td>${(ph[idx]*180/Math.PI).toFixed(3)}</td>
+<td>${vs.toFixed(3)}</td>
+<td>${gd[idx].toFixed(3)}</td>
+<td><button onclick="deleteMarker(${i})">X</button></td>`;
+		body.appendChild(tr);
+	});
+}
+
+function deleteMarker(i){ markers.splice(i,1); updateMarkerTable(); }
+function clearMarkers(){ 
+	markers=[]; 
+	bwMarkers=[]; 
+	["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
+		Plotly.relayout(id,{shapes:[]});
+	});
+	updateMarkerTable(); 
+}
+
+
+const panel = document.getElementById("controlPanel");
+
+panel.style.top = "0px";
+panel.style.left = "500px";
+
+let isDragging = false;
+let shiftX = 0;
+let shiftY = 0;
+
+panel.addEventListener("mousedown", function(e) {
+    isDragging = true;
+
+    const rect = panel.getBoundingClientRect();
+    shiftX = e.clientX - rect.left;
+    shiftY = e.clientY - rect.top;
+
+    document.addEventListener("mousemove", onMouseMove);
+});
+
+function onMouseMove(e) {
+    if (!isDragging) return;
+
+    panel.style.left = e.pageX - shiftX + "px";
+    panel.style.top  = e.pageY - shiftY + "px";
+}
+
+document.addEventListener("mouseup", function() {
+    isDragging = false;
+    document.removeEventListener("mousemove", onMouseMove);
+});
+
+panel.ondragstart = () => false;
+
+const bwColors = [
+    "#00FF00", // bright green
+    "#00BFFF", // deep sky blue
+    "#FFA500", // orange
+    "#FF69B4", // hot pink
+    "#8A2BE2", // blue violet
+    "#FF4500"  // orange red
+];
+/* ================= BANDWIDTH ================= */
+function measureBandwidth(){
+    if(!datasets.length) return;
+
+    const param = document.getElementById("paramSelect").value;
+    const bwMode = document.getElementById("bwMode");
+
+    // Auto-select IL or RL based on parameter
+    bwMode.value = (param[1] !== param[2]) ? "il" : "rl";
+    const mode = bwMode.value;
+
+    const threshold = parseFloat(document.getElementById("rlThreshold").value);
+
+    const tbody = document.getElementById("bwResultTable");
+    tbody.innerHTML = ""; // clear previous results
+
+    let bwMarkersAll = [];
+
+    datasets.forEach((ds, idx) => {
+        const f_Hz = ds.freq;
+        const {scale: fScale, unit: fUnit} = getFreqScale(f_Hz);
+        const f_plot = f_Hz.map(v => v / fScale);
+
+        let indices = [];
+        const color = bwColors[idx % bwColors.length];
+
+        const isTransmission = param[1] !== param[2];
+
+        if(mode === "il" && isTransmission){
+            const magDB = ds.sparams[param].map(c => 20*Math.log10(mag(c)));
+            const peak = Math.max(...magDB);
+            const target = peak - threshold;
+            indices = magDB.map((v,i)=>v>=target?i:-1).filter(i=>i>=0);
+        } else {
+            const rl = ds.sparams[param].map(c => -20*Math.log10(mag(c)));
+            indices = rl.map((v,i)=>v>=threshold?i:-1).filter(i=>i>=0);
+        }
+
+        // Create table row
+        const row = document.createElement("tr");
+        row.style.cursor = "pointer";
+
+        if(indices.length){
+            const f1 = f_plot[indices[0]], f2 = f_plot[indices[indices.length-1]];
+
+            row.innerHTML = `
+                <td style="color:${color}">${ds.name}</td>
+                <td>${f1.toFixed(6)} ${fUnit}</td>
+                <td>${f2.toFixed(6)} ${fUnit}</td>
+            `;
+
+            // Save start/stop in Hz for input copying
+            row.dataset.start = f_Hz[indices[0]];
+            row.dataset.stop  = f_Hz[indices[indices.length-1]];
+
+            bwMarkersAll.push({dataset: ds.name, f1, f2, color});
+        } else {
+            row.innerHTML = `
+                <td style="color:#FF0000">${ds.name}</td>
+                <td colspan="2">No valid region</td>
+            `;
+            row.dataset.start = "";
+            row.dataset.stop = "";
+        }
+
+        // Click row to copy values
+        row.onclick = function() {
+            if(!this.dataset.start || !this.dataset.stop) return;
+            document.getElementById("startFreq").value = formatFreqForInput(parseFloat(this.dataset.start));
+            document.getElementById("stopFreq").value  = formatFreqForInput(parseFloat(this.dataset.stop));
+            // Highlight briefly
+            this.style.background = "#2563eb";
+            setTimeout(()=>this.style.background="", 300);
+        };
+
+        tbody.appendChild(row);
+    });
+
+    // Draw vertical lines on all plots
+    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
+        let shapes = [];
+        bwMarkersAll.forEach(bw=>{
+            shapes.push(
+                { type: 'line', x0: bw.f1, x1: bw.f1, y0: 0, y1: 1, yref:'paper', line:{color:bw.color,width:2,dash:'dot'} },
+                { type: 'line', x0: bw.f2, x1: bw.f2, y0: 0, y1: 1, yref:'paper', line:{color:bw.color,width:2,dash:'dot'} }
+            );
+        });
+        Plotly.relayout(id, {shapes});
+    });
+
+    // Save markers globally
+    bwMarkers = bwMarkersAll.flatMap(b => [b.f1, b.f2]);
+}
+
+document.getElementById("paramSelect").onchange = () => {
+    let param = document.getElementById("paramSelect").value;
+    let bwMode = document.getElementById("bwMode");
+    bwMode.value = (param[1] !== param[2]) ? "il" : "rl"; // auto set mode
+    updateAll();
+};
+
+</script>
+
+</body>
+</html>
