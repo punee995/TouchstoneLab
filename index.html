@@ -733,7 +733,7 @@ document.getElementById("paramSelect").onchange = () => {
 /* ================= LOAD DEMO S5P ================= */
 async function loadDemoFile() {
     try {
-        const response = await fetch("./demo.s5p");
+        const response = await fetch("./demo.S5P");
         if (!response.ok) {
             console.warn("Demo file not found.");
             return;
