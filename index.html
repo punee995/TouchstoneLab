@@ -27,20 +27,20 @@ tr:nth-child(even){ background:#0f172a; }
 
 .chart-container.fullscreen {
   position: fixed;
-  top: 0; left: 0;
+  inset: 0;
   width: 100vw;
   height: 100vh;
   z-index: 9999;
   background: #111827;
-  padding: 10px;
+  padding: 20px;
+  box-sizing: border-box;
 }
-
 .chart-container .plot {
   width: 100%;
   height: 100%;
 }
 
-#controlPanel {
+/* #controlPanel {
   position: fixed;
   top: 10px;
   left: 10px;
@@ -52,26 +52,72 @@ tr:nth-child(even){ background:#0f172a; }
   border-radius: 8px;
   flex-wrap: wrap;
   overflow-x: auto;
+} */
+
+.fs-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 1000;
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border: none;
+    padding: 4px 8px;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+
+.fs-btn:hover {
+    background: #2563eb;
+}
+
+#globalDropOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20000;
+}
+
+#globalDropOverlay.hidden {
+  display: none;
+}
+
+.drop-box {
+  border: 3px dashed #3b82f6;
+  padding: 40px 80px;
+  font-size: 22px;
+  font-weight: 600;
+  color: #60a5fa;
+  background: #111827;
+  border-radius: 16px;
+  text-align: center;
+  animation: pulse 1.2s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 0.9; }
 }
 
 </style>
 </head>
 <body class="text-gray-200">
 
-<header class="bg-gray-900 p-4 text-lg sm:text-xl md:text-2xl font-semibold shadow">
-Touchstone Lab
-</header>
+<header class="bg-gray-900 p-4 shadow flex flex-col lg:flex-row lg:items-center gap-4">
 
-<div class="p-4 space-y-4">
-
-<!-- Control Panel -->
-<div class="card p-4 rounded flex flex-wrap gap-2 items-center overflow-x-auto" id="controlPanel">
-
-<input type="file" id="fileInput" multiple class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" accept=".s1p,.s2p,.s3p,.s4p,.s5p">
-
+  <div class="text-lg sm:text-xl md:text-2xl font-semibold">
+    Touchstone Lab
+  </div>
 <div class="w-px bg-gray-500 h-6"></div>
-
-<select id="plotMode" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Plot Mode">
+  <div id="controlPanel" class="flex flex-wrap gap-2 items-center">
+    <select id="plotMode" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Plot Mode">
 <option value="single">Single Parameter</option>
 <option value="all">Overlay All</option>
 </select>
@@ -104,47 +150,71 @@ Measure BW
 <input type="text" id="stopFreq" placeholder="Stop Freq (e.g., 1G)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Stop Frequency">
 <button onclick="updateAll()" class="bg-green-600 px-3 py-2 rounded text-sm sm:text-base">Apply Range</button>
 
-<div class="w-px bg-gray-500 h-6"></div>
+<!-- <div class="w-px bg-gray-500 h-6"></div>
 <button onclick="loadDemoFile()" class="bg-purple-600 px-3 py-2 rounded text-sm">
 Load Demo
-</button>
-</div>
+</button> -->
+  </div>
+
+</header>
+<div class="p-4 space-y-4">
+
 
 <!-- Chart Grid -->
-<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4">
-
-<div class="card p-2">
-  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+<!-- <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4"> -->
+<div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 gap-3">
+<!-- Magnitude -->
+<div class="card p-1">
+  <div class="chart-container">
+    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
     <div id="magPlot" class="plot"></div>
   </div>
 </div>
-<div class="card p-2">
-  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+
+<!-- Phase -->
+<div class="card p-1">
+  <div class="chart-container">
+    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
     <div id="phasePlot" class="plot"></div>
   </div>
 </div>
-<div class="card p-2">
-  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+
+<!-- Return Loss -->
+<div class="card p-1">
+  <div class="chart-container">
+    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
     <div id="rlPlot" class="plot"></div>
   </div>
 </div>
-<div class="card p-2">
-  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+
+<!-- VSWR -->
+<div class="card p-1">
+  <div class="chart-container">
+    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
     <div id="vswrPlot" class="plot"></div>
   </div>
 </div>
-<div class="card p-2">
-  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+
+<!-- Group Delay -->
+<div class="card p-1">
+  <div class="chart-container">
+    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
     <div id="gdPlot" class="plot"></div>
   </div>
 </div>
-<div class="card p-2">
-  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+
+<!-- Impedance -->
+<div class="card p-1">
+  <div class="chart-container">
+    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
     <div id="impPlot" class="plot"></div>
   </div>
 </div>
-<div class="card p-2">
-  <div class="chart-container" ondblclick="toggleFullScreen(this)">
+
+<!-- Smith Chart (Full Width) -->
+<div class="card p-1 lg:col-span-2">
+  <div class="chart-container">
+    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
     <div id="smithPlot" class="plot"></div>
   </div>
 </div>
@@ -193,12 +263,51 @@ Load Demo
 </div>
 </div>
 
+<div id="globalDropOverlay" class="hidden">
+  <div class="drop-box">
+    Drop Touchstone File Here
+  </div>
+</div>
+
+<div id="startupPopup"
+     class="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-[30000] opacity-0 pointer-events-none transition-opacity duration-500">
+
+  <div class="bg-gray-900 border border-blue-500 px-10 py-8 rounded-2xl shadow-2xl text-center animate-pulse">
+    <h2 class="text-2xl font-semibold text-blue-400 mb-2">
+      Touchstone Lab
+    </h2>
+    <p class="text-lg text-gray-200">
+      Drag & Drop Touchstone file (.s1p, .s2p, .sNp) to continue
+    </p>
+  </div>
+
+</div>
+
 <script>
 // ================= FULLSCREEN TOGGLE =================
 function toggleFullScreen(container){
-    container.classList.toggle('fullscreen');
-    let plotDiv = container.querySelector('.plot');
-    setTimeout(()=>Plotly.Plots.resize(plotDiv), 50);
+
+    const isFull = container.classList.contains("fullscreen");
+
+    if(!isFull){
+        container.classList.add("fullscreen");
+    } else {
+        container.classList.remove("fullscreen");
+
+        // Force reset styles
+        container.style.width = "";
+        container.style.height = "";
+    }
+
+    const btn = container.querySelector(".fs-btn");
+    btn.textContent = container.classList.contains("fullscreen") ? "✕" : "⛶";
+
+    const plotDiv = container.querySelector(".plot");
+
+    // Important: give browser time to reflow
+    setTimeout(()=>{
+        Plotly.Plots.resize(plotDiv);
+    },150);
 }
 
 // Touch double-tap for mobile
@@ -214,12 +323,17 @@ document.querySelectorAll('.chart-container').forEach(container=>{
 
 document.addEventListener("keydown", function(e){
     if(e.key === "Escape"){
-        document.querySelectorAll(".chart-container.fullscreen").forEach(container=>{
+        document.querySelectorAll(".chart-container.fullscreen")
+        .forEach(container=>{
             container.classList.remove("fullscreen");
-            let plotDiv = container.querySelector(".plot");
-            plotDiv.style.width = "100%";
-            plotDiv.style.height = "100%";
-            setTimeout(() => Plotly.Plots.resize(plotDiv), 50);
+
+            const btn = container.querySelector(".fs-btn");
+            if(btn) btn.textContent = "⛶";
+
+            const plotDiv = container.querySelector(".plot");
+            setTimeout(()=>{
+                Plotly.Plots.resize(plotDiv);
+            },150);
         });
     }
 });
@@ -422,32 +536,6 @@ function parseFreqInput(str) {
 	return num * factor;
 }
 
-document.getElementById("fileInput").addEventListener("change", e=>{
-	datasets=[];
-	let files=e.target.files,loaded=0;
-
-	for(let file of files){
-		let r=new FileReader();
-		r.onload=ev=>{
-			let ds = parseTouchstone(ev.target.result,file.name);
-            processDataset(ds);
-            if(!ds) return;
-			datasets.push(ds);
-			loaded++;
-			if(loaded===files.length){
-				populateParams();
-				let minF = Math.min(...ds.freq);
-				let maxF = Math.max(...ds.freq);
-
-				document.getElementById("startFreq").value = formatFreqForInput(minF);
-				document.getElementById("stopFreq").value = formatFreqForInput(maxF);
-				updateAll();
-			}
-		};
-		r.readAsText(file);
-	}
-});
-
 function populateParams(){
 	let sel=document.getElementById("paramSelect");
 	sel.innerHTML="";
@@ -459,9 +547,41 @@ function populateParams(){
 	});
 }
 
-document.getElementById("plotMode").onchange=updateAll;
+document.getElementById("plotMode").onchange = () => {
+    const plotMode = document.getElementById("plotMode").value;
+    const paramSelect = document.getElementById("paramSelect");
+
+    if(plotMode === "all") {
+        paramSelect.style.display = "none";
+    } else {
+        paramSelect.style.display = "inline-block"; // show it again
+    }
+
+    updateAll();
+};
 document.getElementById("paramSelect").onchange=updateAll;
 document.getElementById("freqScale").onchange=updateAll;
+
+window.addEventListener("DOMContentLoaded", () => {
+
+    const popup = document.getElementById("startupPopup");
+
+    // Show popup
+    popup.classList.remove("opacity-0", "pointer-events-none");
+    popup.classList.add("opacity-100");
+
+    // Auto hide after 5 seconds
+    setTimeout(() => {
+        popup.classList.remove("opacity-100");
+        popup.classList.add("opacity-0");
+
+        setTimeout(() => {
+            popup.classList.add("pointer-events-none");
+        }, 500);
+
+    }, 1500);
+
+});
 
 /* ================= AUTO SCALE ================= */
 function getFreqScale(f_Hz){
@@ -539,23 +659,56 @@ function updateAll(){
         });
     });
 
-    function layout(title){
-        return {
-            paper_bgcolor:"#111827",
-            plot_bgcolor:"#111827",
-            font:{color:"#e5e7eb"},
-            xaxis:{type:scaleType,title:"Frequency ("+fUnit+")"},
-            yaxis:{title:title},
-            legend:{itemclick:"toggleothers"}
-        };
-    }
+function layout(title){
+    return {
+        paper_bgcolor:"#111827",
+        plot_bgcolor:"#111827",
+        font:{color:"#e5e7eb"},
+        margin:{l:60,r:20,t:60,b:60},
 
-    Plotly.react("magPlot", magTr, layout("Magnitude (dB)"));
-    Plotly.react("phasePlot", phaseTr, layout("Phase (deg)"));
-    Plotly.react("rlPlot", rlTr, layout("Return Loss (dB)"));
-    Plotly.react("vswrPlot", vswrTr, layout("VSWR"));
-    Plotly.react("gdPlot", gdTr, layout("Group Delay (ns)"));
-    Plotly.react("impPlot", impTr, layout("Impedance (Ω)"));
+        title:{
+            text: title,
+            x:0.5,
+            xanchor:"center",
+            font:{
+                size:16
+            }
+        },
+
+        xaxis:{
+            type:scaleType,
+            title:"Frequency ("+fUnit+")",
+            automargin:true
+        },
+
+        yaxis:{
+            title:title,
+            automargin:true
+        },
+
+        legend:{
+            orientation:"v",
+            x:1.02,
+            y:1,
+            xanchor:"left",
+            yanchor:"top",
+            bgcolor:"#111827",
+            bordercolor:"#374151",
+            borderwidth:1,
+            font:{size:11},
+            itemclick:"toggle",
+            itemsizing:"constant"
+        },
+        margin:{l:60,r:180,t:60,b:60}
+    };
+}
+
+Plotly.react("magPlot", magTr, layout(param + " - Magnitude (dB)"));
+Plotly.react("phasePlot", phaseTr, layout(param + " - Phase (deg)"));
+Plotly.react("rlPlot", rlTr, layout(param + " - Return Loss (dB)"));
+Plotly.react("vswrPlot", vswrTr, layout(param + " - VSWR"));
+Plotly.react("gdPlot", gdTr, layout(param + " - Group Delay (ns)"));
+Plotly.react("impPlot", impTr, layout(param + " - Impedance (Ω)"));
 
     // Draw Smith
     currentSmithDataTraces = smithDataTraces;
@@ -838,38 +991,38 @@ function clearMarkers(){
 }
 
 
-const panel = document.getElementById("controlPanel");
+// const panel = document.getElementById("controlPanel");
 
-panel.style.top = "0px";
-panel.style.left = "500px";
+// panel.style.top = "0px";
+// panel.style.left = "500px";
 
-let isDragging = false;
-let shiftX = 0;
-let shiftY = 0;
+// let isDragging = false;
+// let shiftX = 0;
+// let shiftY = 0;
 
-panel.addEventListener("mousedown", function(e) {
-    isDragging = true;
+// panel.addEventListener("mousedown", function(e) {
+//     isDragging = true;
 
-    const rect = panel.getBoundingClientRect();
-    shiftX = e.clientX - rect.left;
-    shiftY = e.clientY - rect.top;
+//     const rect = panel.getBoundingClientRect();
+//     shiftX = e.clientX - rect.left;
+//     shiftY = e.clientY - rect.top;
 
-    document.addEventListener("mousemove", onMouseMove);
-});
+//     document.addEventListener("mousemove", onMouseMove);
+// });
 
-function onMouseMove(e) {
-    if (!isDragging) return;
+// function onMouseMove(e) {
+//     if (!isDragging) return;
 
-    panel.style.left = e.pageX - shiftX + "px";
-    panel.style.top  = e.pageY - shiftY + "px";
-}
+//     panel.style.left = e.pageX - shiftX + "px";
+//     panel.style.top  = e.pageY - shiftY + "px";
+// }
 
-document.addEventListener("mouseup", function() {
-    isDragging = false;
-    document.removeEventListener("mousemove", onMouseMove);
-});
+// document.addEventListener("mouseup", function() {
+//     isDragging = false;
+//     document.removeEventListener("mousemove", onMouseMove);
+// });
 
-panel.ondragstart = () => false;
+// panel.ondragstart = () => false;
 
 const bwColors = [
     "#00FF00", // bright green
@@ -1147,6 +1300,82 @@ function calculateLinearity(freq, magDb, startFreq, stopFreq) {
     return maxDev.toFixed(3); // in dB
 }
 
+/* ================= File DROP ================= */
+function handleFiles(files){
+
+    if(!files.length) return;
+
+    datasets = [];
+    let loaded = 0;
+
+    for(let file of files){
+
+        if(!file.name.match(/\.s\d+p$/i)) continue;
+
+        let reader = new FileReader();
+
+        reader.onload = function(ev){
+
+            let ds = parseTouchstone(ev.target.result, file.name);
+            if(!ds) return;
+
+            processDataset(ds);
+            datasets.push(ds);
+
+            loaded++;
+
+            if(loaded === files.length){
+
+                populateParams();
+
+                let minF = Math.min(...datasets[0].freq);
+                let maxF = Math.max(...datasets[0].freq);
+
+                document.getElementById("startFreq").value = formatFreqForInput(minF);
+                document.getElementById("stopFreq").value  = formatFreqForInput(maxF);
+
+                updateAll();
+            }
+        };
+
+        reader.readAsText(file);
+    }
+}
+
+
+let overlay;
+
+window.addEventListener("DOMContentLoaded", () => {
+
+    const overlay = document.getElementById("globalDropOverlay");
+
+    window.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        overlay.classList.remove("hidden");
+    });
+
+    window.addEventListener("dragleave", (e) => {
+        if (e.target === document.documentElement) {
+            overlay.classList.add("hidden");
+        }
+    });
+
+    window.addEventListener("drop", (e) => {
+        e.preventDefault();
+        overlay.classList.add("hidden");
+
+        const validFiles = Array.from(e.dataTransfer.files)
+            .filter(file => file.name.match(/\.s\d+p$/i));
+
+        if (validFiles.length) {
+            handleFiles(validFiles);
+        } else {
+            alert("Please drop valid Touchstone files (.s1p, .s2p, etc.)");
+        }
+    });
+
+});
+
 /* ================= LOAD DEMO S5P ================= */
 async function loadDemoFile() {
     try {
@@ -1193,6 +1422,8 @@ async function loadDemoFile() {
 window.addEventListener("DOMContentLoaded", loadDemoFile);
 	
 </script>
+
+
 
 </body>
 </html>
