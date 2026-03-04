@@ -155,9 +155,14 @@ Load Demo
     <table class="w-full">
       <thead>
         <tr>
-          <th>#</th><th>Freq</th><th>Mag (dB)</th>
-          <th>Phase (deg)</th><th>VSWR</th>
-          <th>GD (ns)</th><th>Delete</th>
+          <th>#</th>
+            <th>Freq</th>
+            <th>Mag (dB)</th>
+            <th>Phase (deg)</th>
+            <th>VSWR</th>
+            <th>GD (ns)</th>
+            <th>Z (Ω)</th>
+            <th>Delete</th>
         </tr>
       </thead>
       <tbody id="markerTable"></tbody>
@@ -538,22 +543,138 @@ function updateAll(){
 	attachClick();
 }
 
-/* ================= MARKERS ================= */
-function attachClick(){
+/* ================= DRAW MARKERS ================= */
+
+function drawMarkers() {
+
+    if (!datasets.length) return;
+
+    let ds = datasets[0];
+    let param = document.getElementById("paramSelect").value;
+    let f_Hz = ds.freq;
+    let {scale: fScale} = getFreqScale(f_Hz);
+    let d = ds.sparams[param];
+
+    let shapesPerPlot = {};
+
     ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-        let gd=document.getElementById(id);
+        shapesPerPlot[id] = [];
+    });
 
-        // Remove any existing listener to prevent duplicates
-        gd.removeAllListeners && gd.removeAllListeners('plotly_click');
+    markers.forEach((m, markerIndex) => {
 
-        gd.on('plotly_click', function(data){
+        let idx = f_Hz.reduce((best,val,i)=>
+            Math.abs(val-m.freqHz)<Math.abs(f_Hz[best]-m.freqHz)?i:best,0);
+
+        let xPlot = f_Hz[idx] / fScale;
+
+        let magDB = 20*Math.log10(mag(d[idx]));
+        let rlVal = -20*Math.log10(mag(d[idx]));
+        let vs = (1+mag(d[idx]))/(1-mag(d[idx]));
+
+        let yValues = {
+            magPlot: magDB,
+            phasePlot: unwrap(d.map(c=>phase(c)))[idx]*180/Math.PI,
+            rlPlot: rlVal,
+            vswrPlot: vs,
+            gdPlot: computeGD(f_Hz, unwrap(d.map(c=>phase(c))))[idx],
+            impPlot: null
+        };
+
+        Object.keys(shapesPerPlot).forEach(id => {
+
+            // Vertical line
+            shapesPerPlot[id].push({
+                type:'line',
+                x0:xPlot, x1:xPlot,
+                y0:0, y1:1,
+                yref:'paper',
+                line:{color:"#facc15",width:1,dash:'dot'}
+            });
+
+            // Horizontal line (skip impedance plot)
+            if(yValues[id] !== null){
+                shapesPerPlot[id].push({
+                    type:'line',
+                    x0:0, x1:1,
+                    xref:'paper',
+                    y0:yValues[id], y1:yValues[id],
+                    line:{color:"#facc15",width:1,dash:'dot'}
+                });
+            }
+        });
+    });
+
+    Object.keys(shapesPerPlot).forEach(id=>{
+        Plotly.relayout(id,{shapes:shapesPerPlot[id]});
+    });
+
+    updateSmithMarkers();
+}
+
+function updateSmithMarkers(){
+
+    if(!datasets.length) return;
+
+    let ds = datasets[0];
+    let param = document.getElementById("paramSelect").value;
+    let f_Hz = ds.freq;
+    let d = ds.sparams[param];
+
+    let smithDots = markers.map(m => {
+
+        let idx = f_Hz.reduce((best,val,i)=>
+            Math.abs(val-m.freqHz)<Math.abs(f_Hz[best]-m.freqHz)?i:best,0);
+
+        return {
+            x:[d[idx].re],
+            y:[d[idx].im],
+            mode:"markers+text",
+            marker:{size:10,color:"#facc15"},
+            text:["M"+(markers.indexOf(m)+1)],
+            textposition:"top center",
+            showlegend:false,
+            hoverinfo:"skip"
+        };
+    });
+
+    let smithGrid = generateSmithGrid(ds.z0);
+
+    Plotly.react("smithPlot",
+        [...smithGrid, ...smithTr, ...smithDots],
+        {
+            paper_bgcolor:"#111827",
+            plot_bgcolor:"#111827",
+            font:{color:"#e5e7eb"},
+            xaxis:{range:[-1.1,1.1],scaleanchor:"y",showgrid:false,showticklabels:false},
+            yaxis:{range:[-1.1,1.1],showgrid:false,showticklabels:false},
+            margin:{l:40,r:40,t:40,b:40},
+            title:"Smith Chart"
+        }
+    );
+}
+
+/* ================= MARKERS ================= */
+
+function attachClick(){
+
+    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
+
+        let plot = document.getElementById(id);
+
+        plot.removeAllListeners && plot.removeAllListeners('plotly_click');
+
+        plot.on('plotly_click', function(data){
+
             if(!datasets.length) return;
-            let xHz = data.points[0].x * getFreqScale(datasets[0].freq).scale;
 
-            // Avoid duplicates: check if already exists
-            if(!markers.includes(xHz)) markers.push(xHz);
+            let scale = getFreqScale(datasets[0].freq).scale;
+            let freqHz = data.points[0].x * scale;
+
+            markers.push({freqHz});
 
             updateMarkerTable();
+            drawMarkers();
         });
     });
 }
@@ -580,29 +701,75 @@ function updateMarkerTable(){
 			Math.abs(val-mf)<Math.abs(f_Hz[best]-mf)?j:best,0);
 
 		let mval=mag(d[idx]);
-		let vs=(1+Math.min(mval,0.999999))/(1-Math.min(mval,0.999999));
+        let vs=(1+Math.min(mval,0.999999))/(1-Math.min(mval,0.999999));
 
+        // ---- Impedance Calculation ----
+        let gammaRe = d[idx].re;
+        let gammaIm = d[idx].im;
+
+        let den = (1 - gammaRe)**2 + gammaIm**2;
+
+        let zRe = ds.z0 * (((1 + gammaRe)*(1 - gammaRe) + gammaIm*gammaIm) / den);
+        let zIm = ds.z0 * ((2 * gammaIm) / den);
+        
 		let tr=document.createElement("tr");
 		tr.innerHTML=`
-<td>${i+1}</td>
+<td>M${i+1}</td>
 <td>${(f_Hz[idx]/fScale).toFixed(6)} ${fUnit}</td>
 <td>${(20*Math.log10(mval)).toFixed(3)}</td>
 <td>${(ph[idx]*180/Math.PI).toFixed(3)}</td>
 <td>${vs.toFixed(3)}</td>
 <td>${gd[idx].toFixed(3)}</td>
+<td>${zRe.toFixed(2)} + j${zIm.toFixed(2)}</td>
 <td><button onclick="deleteMarker(${i})">X</button></td>`;
 		body.appendChild(tr);
 	});
+
+// ---- Delta Marker (M1 - M2) ----
+if(markers.length >= 2){
+
+    let ds = datasets[0];
+    let param = document.getElementById("paramSelect").value;
+    let f_Hz = ds.freq;
+    let d = ds.sparams[param];
+
+    let idx1 = f_Hz.reduce((best,val,i)=>
+        Math.abs(val-markers[0].freqHz)<Math.abs(f_Hz[best]-markers[0].freqHz)?i:best,0);
+
+    let idx2 = f_Hz.reduce((best,val,i)=>
+        Math.abs(val-markers[1].freqHz)<Math.abs(f_Hz[best]-markers[1].freqHz)?i:best,0);
+
+    let deltaF = f_Hz[idx2] - f_Hz[idx1];
+    let deltaMag = 20*Math.log10(mag(d[idx2])) - 20*Math.log10(mag(d[idx1]));
+
+    let tr = document.createElement("tr");
+    tr.style.background = "#1e293b";
+    tr.innerHTML = `
+        <td colspan="2"><b>Δ M1→M2</b></td>
+        <td>${deltaMag.toFixed(3)} dB</td>
+        <td colspan="3">${(deltaF/1e6).toFixed(3)} MHz</td>
+        <td></td>`;
+    document.getElementById("markerTable").appendChild(tr);
 }
 
-function deleteMarker(i){ markers.splice(i,1); updateMarkerTable(); }
+}
+
+function deleteMarker(i){
+    markers.splice(i,1);
+    updateMarkerTable();
+    drawMarkers();   // <-- IMPORTANT
+}
+
 function clearMarkers(){ 
-	markers=[]; 
-	bwMarkers=[]; 
-	["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-		Plotly.relayout(id,{shapes:[]});
-	});
-	updateMarkerTable(); 
+    markers = []; 
+    bwMarkers = []; 
+
+    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
+        Plotly.relayout(id,{shapes:[]});
+    });
+
+    updateMarkerTable();
+    updateAll();  // redraw smith without marker dots
 }
 
 
