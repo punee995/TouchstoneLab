@@ -508,15 +508,32 @@ function updateAll(){
 	Plotly.react("rlPlot", rlTr, layoutWithUnit("Return Loss", yUnits["rlPlot"]));
 	Plotly.react("vswrPlot", vswrTr, layoutWithUnit("VSWR", yUnits["vswrPlot"]));
 	Plotly.react("gdPlot", gdTr, layoutWithUnit("Group Delay", yUnits["gdPlot"]));
+
 	Plotly.react("impPlot", impTr, layoutWithUnit("Impedance", yUnits["impPlot"]));
-	Plotly.react("smithPlot", smithTr,{
-		paper_bgcolor:"#111827",
-		plot_bgcolor:"#111827",
-		font:{color:"#e5e7eb"},
-		xaxis:{range:[-1.1,1.1],scaleanchor:"y"},
-		yaxis:{range:[-1.1,1.1]},
-		title:"Smith Chart"
-	});
+
+  let smithGrid = generateSmithGrid(datasets[0].z0);
+
+  Plotly.react("smithPlot",
+      [...smithGrid, ...smithTr],
+      {
+          paper_bgcolor:"#111827",
+          plot_bgcolor:"#111827",
+          font:{color:"#e5e7eb"},
+          xaxis:{
+              range:[-1.1,1.1],
+              zeroline:false,
+              showgrid:false,
+              scaleanchor:"y"
+          },
+          yaxis:{
+              range:[-1.1,1.1],
+              zeroline:false,
+              showgrid:false
+          },
+          margin:{l:40,r:40,t:40,b:40},
+          title:"Smith Chart (Normalized)"
+      }
+  );
 
 	attachClick();
 }
@@ -630,6 +647,102 @@ const bwColors = [
     "#8A2BE2", // blue violet
     "#FF4500"  // orange red
 ];
+
+/* ================= SMITH GRID ================= */
+
+function generateSmithGrid(z0 = 50) {
+
+    const traces = [];
+
+    const rList = [0, 0.2, 0.5, 1, 2, 5];      // constant resistance
+    const xList = [0.2, 0.5, 1, 2, 5];         // constant reactance
+
+    const xSweep = [];
+    for (let x = -10; x <= 10; x += 0.01) xSweep.push(x);
+
+    const rSweep = [];
+    for (let r = 0; r <= 10; r += 0.01) rSweep.push(r);
+
+    // ---- Constant Resistance Circles ----
+    rList.forEach(r => {
+
+        let gammaRe = [];
+        let gammaIm = [];
+
+        xSweep.forEach(x => {
+
+            let z = { re: r, im: x };
+            let denom = (z.re + 1)**2 + z.im**2;
+
+            let gr = ((z.re - 1)*(z.re + 1) + z.im**2) / denom;
+            let gi = (2 * z.im) / denom;
+
+            gammaRe.push(gr);
+            gammaIm.push(gi);
+        });
+
+        traces.push({
+            x: gammaRe,
+            y: gammaIm,
+            mode: "lines",
+            line: { color: "#374151", width: 1 },
+            hoverinfo: "skip",
+            showlegend: false
+        });
+    });
+
+    // ---- Constant Reactance Arcs ----
+    xList.forEach(x => {
+
+        [-1, 1].forEach(sign => {
+
+            let gammaRe = [];
+            let gammaIm = [];
+
+            rSweep.forEach(r => {
+
+                let z = { re: r, im: sign * x };
+                let denom = (z.re + 1)**2 + z.im**2;
+
+                let gr = ((z.re - 1)*(z.re + 1) + z.im**2) / denom;
+                let gi = (2 * z.im) / denom;
+
+                gammaRe.push(gr);
+                gammaIm.push(gi);
+            });
+
+            traces.push({
+                x: gammaRe,
+                y: gammaIm,
+                mode: "lines",
+                line: { color: "#374151", width: 1 },
+                hoverinfo: "skip",
+                showlegend: false
+            });
+        });
+    });
+
+    // ---- Outer Circle ----
+    let circleRe = [];
+    let circleIm = [];
+
+    for (let t = 0; t <= 2*Math.PI; t += 0.01) {
+        circleRe.push(Math.cos(t));
+        circleIm.push(Math.sin(t));
+    }
+
+    traces.push({
+        x: circleRe,
+        y: circleIm,
+        mode: "lines",
+        line: { color: "#6b7280", width: 2 },
+        hoverinfo: "skip",
+        showlegend: false
+    });
+
+    return traces;
+}
+
 /* ================= BANDWIDTH ================= */
 function measureBandwidth(){
     if(!datasets.length) return;
