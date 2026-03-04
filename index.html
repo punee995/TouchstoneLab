@@ -179,6 +179,7 @@ Load Demo
       <th>Dataset</th>
       <th>Start Freq</th>
       <th>Stop Freq</th>
+      <th>Linearity (± dB)</th>
       <th>Bandwidth</th>
     </tr>
   </thead>
@@ -578,82 +579,87 @@ function smooth(arr, window=5){
 
 function drawMarkers() {
 
-    // Always clear existing crosshair shapes first
+    if (!datasets.length) return;
+
+    let param = document.getElementById("paramSelect").value;
+    let {scale: fScale} = getFreqScale(datasets[0].freq);
+
+    // Remove old marker traces first
     ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-        Plotly.relayout(id,{shapes:[]});
+        let gd = document.getElementById(id);
+        if(!gd.data) return;
+
+        let markerIndices = [];
+        gd.data.forEach((tr,i)=>{
+            if(tr.name && tr.name.startsWith("MARKER_"))
+                markerIndices.push(i);
+        });
+
+        if(markerIndices.length)
+            Plotly.deleteTraces(id, markerIndices);
     });
 
-    if (!datasets.length || !markers.length) {
-        drawSmithChart();   // also refresh Smith without markers
+    if (!markers.length) {
+        drawSmithChart();
         return;
     }
 
-    let shapesPerPlot = {};
-    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-        shapesPerPlot[id] = [];
-    });
-
-    markers.forEach((m) => {
+    markers.forEach((m,i)=>{
 
         let ds = datasets[m.dsIndex];
-        let param = document.getElementById("paramSelect").value;
-
         let f_Hz = ds.freq;
+        let processed = ds.processed[param];
         let d = ds.sparams[param];
 
-        let idx = f_Hz.reduce((best,val,i)=>
-            Math.abs(val-m.freqHz)<Math.abs(f_Hz[best]-m.freqHz)?i:best,0);
+        if(!processed || !d) return;
 
-        let {scale: fScale} = getFreqScale(f_Hz);
-        let xPlot = f_Hz[idx] / fScale;
+        // Find nearest index
+        let idx = f_Hz.reduce((best,val,j)=>
+            Math.abs(val-m.freqHz)<Math.abs(f_Hz[best]-m.freqHz)?j:best,0);
 
-        let magVal = mag(d[idx]);
+        let x = f_Hz[idx] / fScale;
+
+        let magVal = Math.hypot(d[idx].re, d[idx].im);
         let magDB = 20*Math.log10(magVal);
         let rlVal = -20*Math.log10(magVal);
         let vs = (1+Math.min(magVal,0.999999))/(1-Math.min(magVal,0.999999));
 
-        let ph = ds.processed[param].phase;
-        let gd = ds.processed[param].gd;
+        let ph = processed.phase[idx]*180/Math.PI;
+        let gd = processed.gd[idx];
 
-        let yValues = {
-            magPlot: magDB,
-            phasePlot: ph[idx]*180/Math.PI,
-            rlPlot: rlVal,
-            vswrPlot: vs,
-            gdPlot: gd[idx],
-            impPlot: null
-        };
+        let zRe = processed.z[idx].re;
+        let zIm = processed.z[idx].im;
 
-        Object.keys(shapesPerPlot).forEach(id => {
+        function makeDot(y,labelSuffix=""){
+            return {
+                x:[x],
+                y:[y],
+                mode:"markers+text",
+                marker:{
+                    size:10,
+                    color:"#facc15",
+                    line:{color:"#000",width:1}
+                },
+                text:["M"+(i+1)+labelSuffix],
+                textposition:"top center",
+                name:"MARKER_"+i+"_"+labelSuffix,
+                showlegend:false
+            };
+        }
 
-            // Vertical line
-            shapesPerPlot[id].push({
-                type:'line',
-                x0:xPlot, x1:xPlot,
-                y0:0, y1:1,
-                yref:'paper',
-                line:{color:"#facc15",width:1,dash:'dot'}
-            });
+        // Add markers to plots
+        Plotly.addTraces("magPlot", makeDot(magDB));
+        Plotly.addTraces("phasePlot", makeDot(ph));
+        Plotly.addTraces("rlPlot", makeDot(rlVal));
+        Plotly.addTraces("vswrPlot", makeDot(vs));
+        Plotly.addTraces("gdPlot", makeDot(gd));
 
-            // Horizontal line
-            if(yValues[id] !== null){
-                shapesPerPlot[id].push({
-                    type:'line',
-                    x0:0, x1:1,
-                    xref:'paper',
-                    y0:yValues[id], y1:yValues[id],
-                    line:{color:"#facc15",width:1,dash:'dot'}
-                });
-            }
-        });
+        // Impedance markers (Real & Imag)
+        Plotly.addTraces("impPlot", makeDot(zRe," R"));
+        Plotly.addTraces("impPlot", makeDot(zIm," X"));
     });
 
-    // Apply shapes
-    Object.keys(shapesPerPlot).forEach(id=>{
-        Plotly.relayout(id,{shapes:shapesPerPlot[id]});
-    });
-
-    // Refresh Smith markers
+    // Redraw Smith chart with markers
     drawSmithChart();
 }
 
@@ -1032,6 +1038,14 @@ function measureBandwidth(){
                 const f2Hz = f_Hz[seg[1]];
 
                 const bwHz = f2Hz - f1Hz;
+                const magDb = ds.processed[param].magDB;
+
+                const linearity = calculateLinearity(
+                    f_Hz,
+                    magDb,
+                    f1Hz,
+                    f2Hz
+                );
                 // Format bandwidth nicely
                 let bwDisplay;
                 if (bwHz >= 1e9)      bwDisplay = (bwHz/1e9).toFixed(3) + " GHz";
@@ -1047,6 +1061,7 @@ function measureBandwidth(){
                     <td style="color:${color}">${ds.name}</td>
                     <td>${(f1Hz/fScale).toFixed(6)} ${fUnit}</td>
                     <td>${(f2Hz/fScale).toFixed(6)} ${fUnit}</td>
+                    <td>±${linearity} dB</td>
                     <td><b>${bwDisplay}</b></td>
                 `;
 
@@ -1098,6 +1113,40 @@ document.getElementById("paramSelect").onchange = () => {
     bwMode.value = (param[1] !== param[2]) ? "il" : "rl"; // auto set mode
     updateAll();
 };
+
+function calculateLinearity(freq, magDb, startFreq, stopFreq) {
+    const indices = [];
+
+    for (let i = 0; i < freq.length; i++) {
+        if (freq[i] >= startFreq && freq[i] <= stopFreq) {
+            indices.push(i);
+        }
+    }
+
+    const x = indices.map(i => freq[i]);
+    const y = indices.map(i => magDb[i]);
+
+    // Linear regression
+    const n = x.length;
+    const sumX = x.reduce((a,b)=>a+b,0);
+    const sumY = y.reduce((a,b)=>a+b,0);
+    const sumXY = x.reduce((a,b,i)=>a + b*y[i],0);
+    const sumX2 = x.reduce((a,b)=>a + b*b,0);
+
+    const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+    const intercept = (sumY - slope*sumX) / n;
+
+    // Calculate deviation
+    let maxDev = 0;
+    for (let i = 0; i < n; i++) {
+        const fitted = slope*x[i] + intercept;
+        const dev = Math.abs(y[i] - fitted);
+        if (dev > maxDev) maxDev = dev;
+    }
+
+    return maxDev.toFixed(3); // in dB
+}
+
 /* ================= LOAD DEMO S5P ================= */
 async function loadDemoFile() {
     try {
