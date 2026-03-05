@@ -149,6 +149,7 @@ Measure BW
 <input type="text" id="startFreq" placeholder="Start Freq (e.g., 1k, 2.5M)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Start Frequency">
 <input type="text" id="stopFreq" placeholder="Stop Freq (e.g., 1G)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Stop Frequency">
 <button onclick="updateAll()" class="bg-green-600 px-3 py-2 rounded text-sm sm:text-base">Apply Range</button>
+<button onclick="resetRange()" class="bg-gray-600 px-3 py-2 rounded text-sm sm:text-base">Reset Range</button>
 
 <!-- <div class="w-px bg-gray-500 h-6"></div>
 <button onclick="loadDemoFile()" class="bg-purple-600 px-3 py-2 rounded text-sm">
@@ -415,7 +416,7 @@ function processDataset(ds){
         const phaseRaw = s.map(c => Math.atan2(c.im,c.re));
         const phaseUnwrapped = unwrap(phaseRaw);
         // const gd = computeGD(f, phaseUnwrapped);
-        gd = smooth(computeGD(f, phaseUnwrapped), 3);
+        const gd = smooth(computeGD(f, phaseUnwrapped), 3);
 
         const z = s.map(c=>{
             const den = (1-c.re)**2 + c.im**2;
@@ -607,12 +608,13 @@ function updateAll(){
     if (isNaN(fMin)) fMin = -Infinity;
     if (isNaN(fMax)) fMax = Infinity;
 
-    let {scale: fScale, unit: fUnit} = getFreqScale(datasets[0].freq);
+    let allFreq = datasets.flatMap(ds => ds.freq);
+    let {scale: fScale, unit: fUnit} = getFreqScale(allFreq);
 
     let magTr=[],phaseTr=[],rlTr=[],vswrTr=[],gdTr=[],impTr=[];
     let smithDataTraces=[];
 
-    datasets.forEach(ds=>{
+    datasets.forEach((ds, dsIndex)=>{
 
         let keys=(mode==="all")?Object.keys(ds.sparams):[param];
 
@@ -640,82 +642,154 @@ function updateAll(){
             let z = indices.map(i=>processed.z[i]);
             let sComplex = indices.map(i=>ds.sparams[k][i]);
 
-            magTr.push({x:f_plot,y:magDB,name:label,mode:"lines"});
-            phaseTr.push({x:f_plot,y:ph.map(p=>p*180/Math.PI),name:label,mode:"lines"});
-            rlTr.push({x:f_plot,y:rl,name:label,mode:"lines"});
-            vswrTr.push({x:f_plot,y:vs,name:label,mode:"lines"});
-            gdTr.push({x:f_plot,y:gd,name:label,mode:"lines"});
+            magTr.push({
+                x: f_plot,
+                y: magDB,
+                name: label,
+                mode: "lines",
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Freq: %{x:.6f} " + fUnit +
+                    "<br>Mag: %{y:.3f} dB" +
+                    "<extra>" + label + "</extra>"
+            });
 
-            impTr.push({x:f_plot,y:z.map(v=>v.re),name:label+" R",mode:"lines"});
-            impTr.push({x:f_plot,y:z.map(v=>v.im),name:label+" X",mode:"lines"});
+            phaseTr.push({
+                x: f_plot,
+                y: ph.map(p=>p*180/Math.PI),
+                name: label,
+                mode: "lines",
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Freq: %{x:.6f} " + fUnit +
+                    "<br>Phase: %{y:.3f} deg" +
+                    "<extra>" + label + "</extra>"
+            });
 
-            // Smith data trace
+            rlTr.push({
+                x: f_plot,
+                y: rl,
+                name: label,
+                mode: "lines",
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Freq: %{x:.6f} " + fUnit +
+                    "<br>Return Loss: %{y:.3f} dB" +
+                    "<extra>" + label + "</extra>"
+            });
+
+            vswrTr.push({
+                x: f_plot,
+                y: vs,
+                name: label,
+                mode: "lines",
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Freq: %{x:.6f} " + fUnit +
+                    "<br>VSWR: %{y:.3f}" +
+                    "<extra>" + label + "</extra>"
+            });
+
+            gdTr.push({
+                x: f_plot,
+                y: gd,
+                name: label,
+                mode: "lines",
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Freq: %{x:.6f} " + fUnit +
+                    "<br>Group Delay: %{y:.3f} ns" +
+                    "<extra>" + label + "</extra>"
+            });
+
+            impTr.push({
+                x: f_plot,
+                y: z.map(v=>v.re),
+                name: label+" R",
+                mode: "lines",
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Freq: %{x:.6f} " + fUnit +
+                    "<br>R: %{y:.3f} Ω" +
+                    "<extra>" + label + "</extra>"
+            });
+
+            impTr.push({
+                x: f_plot,
+                y: z.map(v=>v.im),
+                name: label+" X",
+                mode: "lines",
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Freq: %{x:.6f} " + fUnit +
+                    "<br>X: %{y:.3f} Ω" +
+                    "<extra>" + label + "</extra>"
+            });
+
             smithDataTraces.push({
                 x: sComplex.map(c=>c.re),
                 y: sComplex.map(c=>c.im),
                 mode:"lines",
-                name:label
+                name:label,
+                dsIndex: dsIndex,
+                hovertemplate:
+                    "Γ Real: %{x:.4f}" +
+                    "<br>Γ Imag: %{y:.4f}" +
+                    "<extra>" + label + "</extra>"
             });
         });
     });
 
-function layout(title){
-    return {
-        paper_bgcolor:"#111827",
-        plot_bgcolor:"#111827",
-        font:{color:"#e5e7eb"},
-        margin:{l:60,r:20,t:60,b:60},
+    function layout(title){
+        return {
+            hovermode: "closest",
+            paper_bgcolor:"#111827",
+            plot_bgcolor:"#111827",
+            font:{color:"#e5e7eb"},
+            title:{ text:title, x:0.5 },
+            xaxis:{ type:scaleType, title:"Frequency ("+fUnit+")" },
+            yaxis:{ title:title },
+            legend:{
+                orientation:"v",
+                x:1.02,
+                y:1,
+                bgcolor:"#111827",
+                bordercolor:"#374151",
+                borderwidth:1,
+                font:{size:11}
+            },
+            margin:{l:60,r:180,t:60,b:60}
+        };
+    }
 
-        title:{
-            text: title,
-            x:0.5,
-            xanchor:"center",
-            font:{
-                size:16
-            }
-        },
+    Plotly.react("magPlot", magTr, layout(param + " - Magnitude (dB)"));
+    Plotly.react("phasePlot", phaseTr, layout(param + " - Phase (deg)"));
+    Plotly.react("rlPlot", rlTr, layout(param + " - Return Loss (dB)"));
+    Plotly.react("vswrPlot", vswrTr, layout(param + " - VSWR"));
+    Plotly.react("gdPlot", gdTr, layout(param + " - Group Delay (ns)"));
+    Plotly.react("impPlot", impTr, layout(param + " - Impedance (Ω)"));
 
-        xaxis:{
-            type:scaleType,
-            title:"Frequency ("+fUnit+")",
-            automargin:true
-        },
-
-        yaxis:{
-            title:title,
-            automargin:true
-        },
-
-        legend:{
-            orientation:"v",
-            x:1.02,
-            y:1,
-            xanchor:"left",
-            yanchor:"top",
-            bgcolor:"#111827",
-            bordercolor:"#374151",
-            borderwidth:1,
-            font:{size:11},
-            itemclick:"toggle",
-            itemsizing:"constant"
-        },
-        margin:{l:60,r:180,t:60,b:60}
-    };
-}
-
-Plotly.react("magPlot", magTr, layout(param + " - Magnitude (dB)"));
-Plotly.react("phasePlot", phaseTr, layout(param + " - Phase (deg)"));
-Plotly.react("rlPlot", rlTr, layout(param + " - Return Loss (dB)"));
-Plotly.react("vswrPlot", vswrTr, layout(param + " - VSWR"));
-Plotly.react("gdPlot", gdTr, layout(param + " - Group Delay (ns)"));
-Plotly.react("impPlot", impTr, layout(param + " - Impedance (Ω)"));
-
-    // Draw Smith
     currentSmithDataTraces = smithDataTraces;
     drawSmithChart();
 
     attachClick();
     drawMarkers();
+}
+
+function resetRange(){
+
+    if(!datasets.length) return;
+
+    // get min/max across ALL datasets
+    let allFreq = datasets.flatMap(ds => ds.freq);
+
+    let minF = Math.min(...allFreq);
+    let maxF = Math.max(...allFreq);
+
+    document.getElementById("startFreq").value = formatFreqForInput(minF);
+    document.getElementById("stopFreq").value  = formatFreqForInput(maxF);
+
+    updateAll();
 }
 
 function smooth(arr, window=5){
@@ -795,7 +869,7 @@ function drawMarkers() {
                 },
                 text:["M"+(i+1)+labelSuffix],
                 textposition:"top center",
-                name:"MARKER_"+i+"_"+labelSuffix,
+                name:"MARKER_"+(i+1)+""+labelSuffix,
                 showlegend:false
             };
         }
@@ -889,37 +963,44 @@ function attachClick(){
 
         let plot = document.getElementById(id);
 
-        plot.removeAllListeners && plot.removeAllListeners('plotly_click');
+        plot.removeAllListeners?.("plotly_click");
 
-        plot.on('plotly_click', function(data){
+        plot.on("plotly_click", function(data){
 
             if(!datasets.length) return;
 
-            let scale = getFreqScale(datasets[0].freq).scale;
-            let curveIndex = data.points[0].curveNumber;
-            let traceName = data.points[0].data.name;
+            const pts = data.points;
 
-            // Find dataset index from trace name
-            let dsIndex = 0;
+            // choose point closest to cursor vertically
+            let best = pts[0];
+            let minDist = Math.abs(pts[0].y - data.event.y);
 
-            if(datasets.length > 1){
-                let match = traceName.split(" - ")[0];
-                dsIndex = datasets.findIndex(d => d.name === match);
-            }
+            pts.forEach(p=>{
+                let d = Math.abs(p.y - data.event.y);
+                if(d < minDist){
+                    best = p;
+                    minDist = d;
+                }
+            });
 
-            let freqHz = data.points[0].x * scale;
+            const trace = best.data;
+
+            if(trace.name && trace.name.startsWith("MARKER_")) return;
+
+            const scale = getFreqScale(datasets[0].freq).scale;
 
             markers.push({
-                freqHz,
-                dsIndex
+                freqHz: best.x * scale,
+                dsIndex: trace.dsIndex
             });
 
             updateMarkerTable();
             drawMarkers();
+
         });
+
     });
 }
-
 // Run once after DOM loaded
 //attachClick();
 
@@ -1376,6 +1457,15 @@ window.addEventListener("DOMContentLoaded", () => {
 
 });
 
+function formatEngineering(freqHz) {
+    const abs = Math.abs(freqHz);
+
+    if (abs >= 1e9)  return (freqHz / 1e9).toFixed(3) + " GHz";
+    if (abs >= 1e6)  return (freqHz / 1e6).toFixed(3) + " MHz";
+    if (abs >= 1e3)  return (freqHz / 1e3).toFixed(3) + " kHz";
+    return freqHz.toFixed(3) + " Hz";
+}
+
 /* ================= LOAD DEMO S5P ================= */
 async function loadDemoFile() {
     try {
@@ -1422,8 +1512,5 @@ async function loadDemoFile() {
 window.addEventListener("DOMContentLoaded", loadDemoFile);
 	
 </script>
-
-
-
 </body>
 </html>
