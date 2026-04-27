@@ -1,1516 +1,942 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="google-site-verification" content="BfaZ8VFr9Q8y-mA_IBNYZ68o-QqnMaQSzCNHByvdIV4" />
-<title>Touchstone Lab</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Touchstone Lab | RF & Microwave S-Parameter Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#f0f9ff', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
 
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
+        .chart-container {
+            height: 400px;
+            width: 100%;
+            position: relative;
+        }
 
-<style>
-body { background:#0b1120; }
-.card { background:#111827; }
-.plot { width: 100% !important; height: 100% !important; }
-th, td { padding:6px; font-size:12px; text-align:center; }
-th { background:#1f2937; }
-tr:nth-child(even){ background:#0f172a; }
+        .fullscreen-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 50;
+        }
 
-.chart-container {
-  position: relative;
-  cursor: pointer;
-  height: 250px; /* default mobile height */
-}
+        .fullscreen-active {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            background: white;
+            z-index: 9999 !important;
+            padding: 20px;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            box-sizing: border-box;
+        }
 
-@media(min-width:640px){ .chart-container{ height: 300px; } }
-@media(min-width:1024px){ .chart-container{ height: 340px; } }
+        .dark .fullscreen-active {
+            background: #1e293b;
+        }
 
-.chart-container.fullscreen {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 9999;
-  background: #111827;
-  padding: 20px;
-  box-sizing: border-box;
-}
-.chart-container .plot {
-  width: 100%;
-  height: 100%;
-}
+        .fullscreen-active .chart-container {
+            height: calc(100vh - 40px) !important;
+        }
 
-/* #controlPanel {
-  position: fixed;
-  top: 10px;
-  left: 10px;
-  z-index: 10000;
-  width: auto;
-  max-width: 95vw;
-  background: rgba(17,24,39,0.95);
-  padding: 12px;
-  border-radius: 8px;
-  flex-wrap: wrap;
-  overflow-x: auto;
-} */
+        table {
+            border-collapse: collapse;
+            width: 100%;
+        }
 
-.fs-btn {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 1000;
-    background: rgba(0,0,0,0.6);
-    color: white;
-    border: none;
-    padding: 4px 8px;
-    font-size: 14px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: 0.2s ease;
-}
+        th,
+        td {
+            padding: 8px;
+            border: 1px solid #e2e8f0;
+            text-align: left;
+        }
 
-.fs-btn:hover {
-    background: #2563eb;
-}
+        .dark th,
+        .dark td {
+            border-color: #334155;
+            color: #cbd5e1;
+        }
 
-#globalDropOverlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.75);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 20000;
-}
+        .dark th {
+            background-color: #0f172a;
+        }
 
-#globalDropOverlay.hidden {
-  display: none;
-}
+        th {
+            background-color: #f8fafc;
+            font-weight: 600;
+        }
 
-.drop-box {
-  border: 3px dashed #3b82f6;
-  padding: 40px 80px;
-  font-size: 22px;
-  font-weight: 600;
-  color: #60a5fa;
-  background: #111827;
-  border-radius: 16px;
-  text-align: center;
-  animation: pulse 1.2s infinite;
-}
+        /* Disabled states for controls */
+        select:disabled,
+        input:disabled,
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
 
-@keyframes pulse {
-  0% { transform: scale(1); opacity: 0.9; }
-  50% { transform: scale(1.05); opacity: 1; }
-  100% { transform: scale(1); opacity: 0.9; }
-}
+        /* --- Print Styling --- */
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 1.5cm;
+            }
 
-</style>
+            body {
+                background: white !important;
+                color: black !important;
+            }
+
+            /* Hide UI controls not needed in physical print */
+            header,
+            aside,
+            .fullscreen-btn,
+            #resetZoomBtn,
+            #printBtn {
+                display: none !important;
+            }
+
+            /* Expand main content to full page */
+            #mainContent {
+                padding: 0 !important;
+                overflow: visible !important;
+                height: auto !important;
+                width: 100% !important;
+            }
+
+            /* Stack charts sequentially instead of side-by-side to fit A4 width perfectly */
+            .grid {
+                display: block !important;
+            }
+
+            /* Prevent charts and tables from being cut in half across pages */
+            .rounded-xl {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+                box-shadow: none !important;
+                border: 1px solid #e2e8f0 !important;
+                margin-bottom: 2rem !important;
+                padding: 1rem !important;
+            }
+
+            /* Adjust chart height for print to fit 2 per page nicely */
+            .chart-container {
+                height: 350px !important;
+            }
+
+            /* Ensure colors print accurately */
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
 </head>
-<body class="text-gray-200">
 
-<header class="bg-gray-900 p-4 shadow flex flex-col lg:flex-row lg:items-center gap-4">
+<body
+    class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200 min-h-screen flex flex-col">
 
-  <div class="text-lg sm:text-xl md:text-2xl font-semibold">
-    Touchstone Lab
-  </div>
-<div class="w-px bg-gray-500 h-6"></div>
-  <div id="controlPanel" class="flex flex-wrap gap-2 items-center">
-    <select id="plotMode" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Plot Mode">
-<option value="single">Single Parameter</option>
-<option value="all">Overlay All</option>
-</select>
+    <header
+        class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center z-10 sticky top-0">
+        <div class="flex items-center gap-3">
+            <svg class="w-8 h-8 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z">
+                </path>
+            </svg>
+            <h1 class="text-xl font-bold tracking-tight">Touchstone Lab</h1>
+        </div>
+        <button id="themeToggle" aria-label="Toggle Dark Mode"
+            class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition">
+            <svg id="moonIcon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
+            </svg>
+            <svg id="sunIcon" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fill-rule="evenodd"
+                    d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 1.32a1 1 0 011.415 0l.708.708a1 1 0 01-1.414 1.415l-.708-.708a1 1 0 010-1.415zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zm-1.32 4.22a1 1 0 010 1.415l-.708.708a1 1 0 01-1.414-1.415l.708-.708a1 1 0 011.415 0zM10 16a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-4.22-1.32a1 1 0 01-1.415 0l-.708-.708a1 1 0 011.414-1.415l.708.708a1 1 0 010 1.415zM4 10a1 1 0 01-1 1H2a1 1 0 110-2h1a1 1 0 011 1zm1.32-4.22a1 1 0 010-1.415l.708-.708a1 1 0 011.414 1.415l-.708.708a1 1 0 01-1.415 0zM10 5a5 5 0 100 10 5 5 0 000-10z"
+                    clip-rule="evenodd"></path>
+            </svg>
+        </button>
+    </header>
 
-<select id="paramSelect" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Parameter Select"></select>
+    <div class="flex flex-1 overflow-hidden">
+        <aside
+            class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-6 overflow-y-auto flex-shrink-0">
 
-<select id="freqScale" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base" title="Frequency Scale">
-<option value="log">Log</option>
-<option value="linear">Linear</option>
-</select>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload SnP Files</label>
+                <input type="file" id="fileInput" multiple accept=".s1p,.s2p,.s3p,.s4p,.snp"
+                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-900 hover:file:bg-brand-100 cursor-pointer border border-gray-300 dark:border-gray-600 rounded-md">
+            </div>
 
-<div class="w-px bg-gray-500 h-6"></div>
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select
+                    S-Parameter</label>
+                <select id="paramSelect" disabled
+                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white mb-3">
+                    <option value="All">All Parameters</option>
+                </select>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Frequency Scale</label>
+                <select id="freqScaleSelect" disabled
+                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white">
+                    <option value="linear">Linear</option>
+                    <option value="log">Logarithmic</option>
+                </select>
+            </div>
 
-<select id="bwMode" class="bg-gray-800 px-3 py-2 rounded text-sm sm:text-base">
-  <option value="rl">Return Loss Threshold</option>
-  <option value="il">Insertion Loss Threshold</option>
-</select>
+            <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                <h3 class="text-sm font-semibold mb-3">Bandwidth Search</h3>
+                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Linearity Threshold (+/- dB)</label>
+                <input type="number" id="bwThreshold" disabled value="-3" step="0.1"
+                    class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2 mb-3 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+                <button id="calcBwBtn" disabled
+                    class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg text-sm px-4 py-2 transition-colors">Calculate
+                    & Highlight BW</button>
+                <button id="clearBwBtn" disabled
+                    class="w-full mt-2 bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-white font-medium rounded-lg text-sm px-4 py-2 transition-colors hidden">Clear
+                    Highlight</button>
+            </div>
 
-<input type="number" id="rlThreshold" value="10"
-class="bg-gray-800 px-3 py-2 rounded w-full sm:w-24 text-sm sm:text-base"
-title="Return Loss Threshold (dB)">
+            <div>
+                <h3 class="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">Active Datasets</h3>
+                <ul id="datasetList" class="space-y-2 text-sm">
+                    <li class="text-gray-400 italic">No files loaded.</li>
+                </ul>
+                <button id="clearDataBtn" class="mt-4 text-xs text-red-500 hover:text-red-700 hidden">Clear All
+                    Data</button>
+            </div>
+        </aside>
 
-<button onclick="measureBandwidth()" class="bg-blue-600 px-3 py-2 rounded text-sm sm:text-base">
-Measure BW
-</button>
+        <main class="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900 relative" id="mainContent">
+            <div class="max-w-full mx-auto space-y-6">
 
-<div class="w-px bg-gray-500 h-6"></div>
+                <div class="flex justify-end gap-3 mb-2">
+                    <button id="printBtn" aria-label="Print Report"
+                        class="bg-white dark:bg-gray-800 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-800 shadow-sm text-sm px-4 py-2 rounded-md hover:bg-brand-50 dark:hover:bg-gray-700 transition flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
+                            </path>
+                        </svg>
+                        Print Data
+                    </button>
+                    <button id="resetZoomBtn" aria-label="Reset Zoom"
+                        class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm text-sm px-4 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition">Reset
+                        Zoom</button>
+                </div>
 
-<input type="text" id="startFreq" placeholder="Start Freq (e.g., 1k, 2.5M)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Start Frequency">
-<input type="text" id="stopFreq" placeholder="Stop Freq (e.g., 1G)" class="bg-gray-800 px-3 py-2 rounded w-full sm:w-28 text-sm sm:text-base" title="Stop Frequency">
-<button onclick="updateAll()" class="bg-green-600 px-3 py-2 rounded text-sm sm:text-base">Apply Range</button>
-<button onclick="resetRange()" class="bg-gray-600 px-3 py-2 rounded text-sm sm:text-base">Reset Range</button>
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
+                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            data-target="plot-mag" aria-label="Toggle Fullscreen">⛶</button>
+                        <div id="plot-mag" class="chart-container"></div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
+                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            data-target="plot-phase" aria-label="Toggle Fullscreen">⛶</button>
+                        <div id="plot-phase" class="chart-container"></div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
+                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            data-target="plot-gd" aria-label="Toggle Fullscreen">⛶</button>
+                        <div id="plot-gd" class="chart-container"></div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
+                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            data-target="plot-vswr" aria-label="Toggle Fullscreen">⛶</button>
+                        <div id="plot-vswr" class="chart-container"></div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
+                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            data-target="plot-z" aria-label="Toggle Fullscreen">⛶</button>
+                        <div id="plot-z" class="chart-container"></div>
+                    </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
+                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            data-target="plot-smith" aria-label="Toggle Fullscreen">⛶</button>
+                        <div id="plot-smith" class="chart-container"></div>
+                    </div>
+                </div>
 
-<!-- <div class="w-px bg-gray-500 h-6"></div>
-<button onclick="loadDemoFile()" class="bg-purple-600 px-3 py-2 rounded text-sm">
-Load Demo
-</button> -->
-  </div>
+                <div
+                    class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 overflow-x-auto">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-lg font-bold">Marker Table</h2>
+                        <span class="text-xs text-gray-500">Click on any trace in the plots to add a synced
+                            marker.</span>
+                    </div>
+                    <table id="markerTable">
+                        <thead>
+                            <tr>
+                                <th>Marker ID</th>
+                                <th>Dataset</th>
+                                <th>Param</th>
+                                <th>Freq</th>
+                                <th>Mag (dB)</th>
+                                <th>Phase</th>
+                                <th>VSWR</th>
+                                <th>Group Delay</th>
+                                <th>Impedance Z</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="10" class="text-center text-gray-500">No markers added.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
-</header>
-<div class="p-4 space-y-4">
+                <div
+                    class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 overflow-x-auto">
+                    <h2 class="text-lg font-bold mb-4">Bandwidth Table</h2>
+                    <table id="bwTable">
+                        <thead>
+                            <tr>
+                                <th>Dataset</th>
+                                <th>Parameter</th>
+                                <th>Peak Freq</th>
+                                <th>BW Start Freq</th>
+                                <th>BW Stop Freq</th>
+                                <th>Threshold Drop</th>
+                                <th>Overall Bandwidth</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="7" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
 
+            </div>
+        </main>
+    </div>
 
-<!-- Chart Grid -->
-<!-- <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-4"> -->
-<div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-2 gap-3">
-<!-- Magnitude -->
-<div class="card p-1">
-  <div class="chart-container">
-    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
-    <div id="magPlot" class="plot"></div>
-  </div>
-</div>
-
-<!-- Phase -->
-<div class="card p-1">
-  <div class="chart-container">
-    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
-    <div id="phasePlot" class="plot"></div>
-  </div>
-</div>
-
-<!-- Return Loss -->
-<div class="card p-1">
-  <div class="chart-container">
-    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
-    <div id="rlPlot" class="plot"></div>
-  </div>
-</div>
-
-<!-- VSWR -->
-<div class="card p-1">
-  <div class="chart-container">
-    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
-    <div id="vswrPlot" class="plot"></div>
-  </div>
-</div>
-
-<!-- Group Delay -->
-<div class="card p-1">
-  <div class="chart-container">
-    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
-    <div id="gdPlot" class="plot"></div>
-  </div>
-</div>
-
-<!-- Impedance -->
-<div class="card p-1">
-  <div class="chart-container">
-    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
-    <div id="impPlot" class="plot"></div>
-  </div>
-</div>
-
-<!-- Smith Chart (Full Width) -->
-<div class="card p-1 lg:col-span-2">
-  <div class="chart-container">
-    <button class="fs-btn" onclick="toggleFullScreen(this.parentElement)">⛶</button>
-    <div id="smithPlot" class="plot"></div>
-  </div>
-</div>
-
-<div class="card p-2 rounded">
-  <h2 class="text-lg mb-2">Marker Table</h2>
-  <div class="overflow-x-auto">
-    <table class="w-full">
-      <thead>
-        <tr>
-          <th>#</th>
-            <th>Freq</th>
-            <th>Mag (dB)</th>
-            <th>Phase (deg)</th>
-            <th>VSWR</th>
-            <th>GD (ns)</th>
-            <th>Z (Ω)</th>
-            <th>Delete</th>
-        </tr>
-      </thead>
-      <tbody id="markerTable"></tbody>
-    </table>
-  </div>
-</div>
-
-<div class="card p-4">
-  <h2 class="text-lg mb-1">Bandwidth Result</h2>
-  <div class="overflow-x-auto">
-   <table class="w-full text-sm sm:text-base" id="bwResultTable">
-  <thead>
-    <tr>
-      <th>Dataset</th>
-      <th>Start Freq</th>
-      <th>Stop Freq</th>
-      <th>Linearity (± dB)</th>
-      <th>Bandwidth</th>
-    </tr>
-  </thead>
-      <tbody>
-        <tr><td colspan="3">Not measured</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
-
-</div>
-</div>
-
-<div id="globalDropOverlay" class="hidden">
-  <div class="drop-box">
-    Drop Touchstone File Here
-  </div>
-</div>
-
-<div id="startupPopup"
-     class="fixed inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-[30000] opacity-0 pointer-events-none transition-opacity duration-500">
-
-  <div class="bg-gray-900 border border-blue-500 px-10 py-8 rounded-2xl shadow-2xl text-center animate-pulse">
-    <h2 class="text-2xl font-semibold text-blue-400 mb-2">
-      Touchstone Lab
-    </h2>
-    <p class="text-lg text-gray-200">
-      Drag & Drop Touchstone file (.s1p, .s2p, .sNp) to continue
-    </p>
-  </div>
-
-</div>
-
-<script>
-// ================= FULLSCREEN TOGGLE =================
-function toggleFullScreen(container){
-
-    const isFull = container.classList.contains("fullscreen");
-
-    if(!isFull){
-        container.classList.add("fullscreen");
-    } else {
-        container.classList.remove("fullscreen");
-
-        // Force reset styles
-        container.style.width = "";
-        container.style.height = "";
-    }
-
-    const btn = container.querySelector(".fs-btn");
-    btn.textContent = container.classList.contains("fullscreen") ? "✕" : "⛶";
-
-    const plotDiv = container.querySelector(".plot");
-
-    // Important: give browser time to reflow
-    setTimeout(()=>{
-        Plotly.Plots.resize(plotDiv);
-    },150);
-}
-
-// Touch double-tap for mobile
-let lastTap = 0;
-document.querySelectorAll('.chart-container').forEach(container=>{
-    container.addEventListener('touchend', function(e) {
-        let currentTime = new Date().getTime();
-        let tapLength = currentTime - lastTap;
-        if(tapLength < 500 && tapLength > 0) { toggleFullScreen(container); }
-        lastTap = currentTime;
-    });
-});
-
-document.addEventListener("keydown", function(e){
-    if(e.key === "Escape"){
-        document.querySelectorAll(".chart-container.fullscreen")
-        .forEach(container=>{
-            container.classList.remove("fullscreen");
-
-            const btn = container.querySelector(".fs-btn");
-            if(btn) btn.textContent = "⛶";
-
-            const plotDiv = container.querySelector(".plot");
-            setTimeout(()=>{
-                Plotly.Plots.resize(plotDiv);
-            },150);
-        });
-    }
-});
-
-/* ================= GLOBAL ================= */
-let datasets=[];
-let markers=[];
-let bwMarkers=[];
-let currentSmithDataTraces = [];
-/* ================= MATH ================= */
-function mag(c){ return Math.hypot(c.re,c.im); }
-function phase(c){ return Math.atan2(c.im,c.re); }
-
-function unwrap(ph){
-	let out=[ph[0]],offset=0;
-	for(let i=1;i<ph.length;i++){
-		let dp=ph[i]-ph[i-1];
-		if(dp>Math.PI) offset-=2*Math.PI;
-		if(dp<-Math.PI) offset+=2*Math.PI;
-		out.push(ph[i]+offset);
-	}
-	return out;
-}
-
-function computeGD(f,ph){
-	let gd=[];
-	for(let i=0;i<f.length;i++){
-		if(i===0)
-			gd.push(-(ph[1]-ph[0])/(2*Math.PI*(f[1]-f[0]))*1e9);
-		else if(i===f.length-1){
-			let n=f.length-1;
-			gd.push(-(ph[n]-ph[n-1])/(2*Math.PI*(f[n]-f[n-1]))*1e9);
-		}else{
-			gd.push(-(ph[i+1]-ph[i-1])/(2*Math.PI*(f[i+1]-f[i-1]))*1e9);
-		}
-	}
-	return gd;
-}
-
-/* ================= PARSER ================= */
-function convertFreq(f,u){
-	u=u.toUpperCase();
-	if(u==="GHZ") return f*1e9;
-	if(u==="MHZ") return f*1e6;
-	if(u==="KHZ") return f*1e3;
-	return f;
-}
-
-function toComplex(a,b,f){
-	if(f==="RI") return {re:a,im:b};
-	let ang=b*Math.PI/180;
-	if(f==="MA") return {re:a*Math.cos(ang),im:a*Math.sin(ang)};
-	if(f==="DB"){
-		let m=Math.pow(10,a/20);
-		return {re:m*Math.cos(ang),im:m*Math.sin(ang)};
-	}
-}
-
-function processDataset(ds){
-
-    ds.processed = {};
-
-    Object.keys(ds.sparams).forEach(param => {
-
-        const f = ds.freq;
-        const s = ds.sparams[param];
-
-        const magLin = new Float64Array(s.length);
-            for(let i=0;i<s.length;i++){
-                magLin[i] = Math.hypot(s[i].re, s[i].im);
-            }
-        const magDB  = magLin.map(v => 20*Math.log10(v));
-        const rl     = magLin.map(v => -20*Math.log10(v));
-        const vswr   = magLin.map(v=>{
-            v = Math.min(v,0.999999);
-            return (1+v)/(1-v);
-        });
-
-        const phaseRaw = s.map(c => Math.atan2(c.im,c.re));
-        const phaseUnwrapped = unwrap(phaseRaw);
-        // const gd = computeGD(f, phaseUnwrapped);
-        const gd = smooth(computeGD(f, phaseUnwrapped), 3);
-
-        const z = s.map(c=>{
-            const den = (1-c.re)**2 + c.im**2;
-            return {
-                re: ds.z0*((1+c.re)*(1-c.re)+c.im*c.im)/den,
-                im: ds.z0*(2*c.im)/den
-            };
-        });
-
-        ds.processed[param] = {
-            magLin,
-            magDB,
-            rl,
-            vswr,
-            phase: phaseUnwrapped,
-            gd,
-            z
+    <script>
+        const AppState = {
+            datasets: [],
+            selectedParam: 'All',
+            freqScaleType: 'linear',
+            markers: [],
+            bwHighlights: [],
+            isDark: false,
+            colorPalette: ['#0ea5e9', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
         };
-    });
-}
 
-function parseTouchstone(text,name){
+        const DOM = {
+            fileInput: document.getElementById('fileInput'),
+            paramSelect: document.getElementById('paramSelect'),
+            freqScaleSelect: document.getElementById('freqScaleSelect'),
+            datasetList: document.getElementById('datasetList'),
+            clearDataBtn: document.getElementById('clearDataBtn'),
+            resetZoomBtn: document.getElementById('resetZoomBtn'),
+            printBtn: document.getElementById('printBtn'),
+            calcBwBtn: document.getElementById('calcBwBtn'),
+            clearBwBtn: document.getElementById('clearBwBtn'),
+            bwThreshold: document.getElementById('bwThreshold'),
+            themeToggle: document.getElementById('themeToggle'),
+            markerTableBody: document.querySelector('#markerTable tbody'),
+            bwTableBody: document.querySelector('#bwTable tbody')
+        };
 
-    let freq=[],sparams={},format="MA",unit="HZ";
-    let z0=50;
+        const PLOT_DIVS = ['plot-mag', 'plot-phase', 'plot-gd', 'plot-vswr', 'plot-z', 'plot-smith'];
+        let isSyncing = false;
+        let listenersAttached = false;
 
-    // 🔹 Detect number of ports from file extension
-    let portMatch = name.match(/\.s(\d+)p$/i);
-    if(!portMatch){
-        console.error("Cannot detect port count from filename");
-        return null;
-    }
-    let ports = parseInt(portMatch[1]);
+        const Utils = {
+            escapeHTML: (str) => str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]))
+        };
 
-    let expected = 1 + 2*ports*ports;   // numbers per frequency block
-    let buffer=[];
-
-    text.split(/\r?\n/).forEach(line=>{
-
-        line=line.trim();
-        if(!line) return;
-
-        // Remove full-line comments
-        if(line.startsWith("!")) return;
-
-        // Remove inline comments
-        line = line.split("!")[0].trim();
-        if(!line) return;
-
-        // Header line
-        if(line.startsWith("#")){
-            let p=line.split(/\s+/);
-            unit=p[1].toUpperCase();
-            format=p[3].toUpperCase();
-            if(p.includes("R")) z0=parseFloat(p[p.indexOf("R")+1]);
-            return;
-        }
-
-        // Convert numbers
-        let nums=line.split(/\s+/).map(Number);
-        if(nums.some(n=>isNaN(n))) return;
-
-        // Accumulate numbers (works for single or multiline)
-        buffer.push(...nums);
-
-        // Process full blocks
-        while(buffer.length >= expected){
-
-            let f = buffer[0];
-            freq.push(convertFreq(f,unit));
-
-            let idx=1;
-
-            for(let i=1;i<=ports;i++){
-                for(let j=1;j<=ports;j++){
-                    let key=`S${i}${j}`;
-                    if(!sparams[key]) sparams[key]=[];
-
-                    sparams[key].push(
-                        toComplex(buffer[idx],buffer[idx+1],format)
-                    );
-
-                    idx+=2;
-                }
-            }
-
-            // Remove processed block
-            buffer.splice(0,expected);
-        }
-    });
-
-    console.log("Parsed:", name);
-    console.log("Ports:", ports);
-    console.log("Frequency points:", freq.length);
-
-    return {name,freq,sparams,z0};
-}
-
-/* ================= FILE LOAD ================= */
-function formatFreqForInput(f_Hz) {
-	if(f_Hz >= 1e9) return (f_Hz/1e9)+"G";
-	if(f_Hz >= 1e6) return (f_Hz/1e6)+"M";
-	if(f_Hz >= 1e3) return (f_Hz/1e3)+"k";
-	return f_Hz.toString();
-}
-
-function parseFreqInput(str) {
-	if (!str) return NaN;
-	str = str.trim().toUpperCase();
-	let factor = 1;
-	if (str.endsWith("K")) factor = 1e3;
-	else if (str.endsWith("M")) factor = 1e6;
-	else if (str.endsWith("G")) factor = 1e9;
-
-	let num = parseFloat(str);
-	if (isNaN(num)) return NaN;
-
-	return num * factor;
-}
-
-function populateParams(){
-	let sel=document.getElementById("paramSelect");
-	sel.innerHTML="";
-	Object.keys(datasets[0].sparams).forEach(k=>{
-		let o=document.createElement("option");
-		o.value=k;
-		o.textContent=k;
-		sel.appendChild(o);
-	});
-}
-
-document.getElementById("plotMode").onchange = () => {
-    const plotMode = document.getElementById("plotMode").value;
-    const paramSelect = document.getElementById("paramSelect");
-
-    if(plotMode === "all") {
-        paramSelect.style.display = "none";
-    } else {
-        paramSelect.style.display = "inline-block"; // show it again
-    }
-
-    updateAll();
-};
-document.getElementById("paramSelect").onchange=updateAll;
-document.getElementById("freqScale").onchange=updateAll;
-
-window.addEventListener("DOMContentLoaded", () => {
-
-    const popup = document.getElementById("startupPopup");
-
-    // Show popup
-    popup.classList.remove("opacity-0", "pointer-events-none");
-    popup.classList.add("opacity-100");
-
-    // Auto hide after 5 seconds
-    setTimeout(() => {
-        popup.classList.remove("opacity-100");
-        popup.classList.add("opacity-0");
-
-        setTimeout(() => {
-            popup.classList.add("pointer-events-none");
-        }, 500);
-
-    }, 1500);
-
-});
-
-/* ================= AUTO SCALE ================= */
-function getFreqScale(f_Hz){
-	let maxF = Math.max(...f_Hz);
-	if(maxF>=1e9) return {scale:1e9,unit:"GHz"};
-	if(maxF>=1e6) return {scale:1e6,unit:"MHz"};
-	if(maxF>=1e3) return {scale:1e3,unit:"kHz"};
-	return {scale:1,unit:"Hz"};
-}
-
-/* ================= UPDATE ================= */
-function updateAll(){
-
-    if(!datasets.length) return;
-
-    let mode=document.getElementById("plotMode").value;
-    let param=document.getElementById("paramSelect").value;
-    let scaleType=document.getElementById("freqScale").value;
-
-    let fMin = parseFreqInput(document.getElementById("startFreq").value);
-    let fMax = parseFreqInput(document.getElementById("stopFreq").value);
-
-    if (isNaN(fMin)) fMin = -Infinity;
-    if (isNaN(fMax)) fMax = Infinity;
-
-    let allFreq = datasets.flatMap(ds => ds.freq);
-    let {scale: fScale, unit: fUnit} = getFreqScale(allFreq);
-
-    let magTr=[],phaseTr=[],rlTr=[],vswrTr=[],gdTr=[],impTr=[];
-    let smithDataTraces=[];
-
-    datasets.forEach((ds, dsIndex)=>{
-
-        let keys=(mode==="all")?Object.keys(ds.sparams):[param];
-
-        keys.forEach(k=>{
-
-            let processed = ds.processed[k];
-
-            let indices = ds.freq
-                .map((f,i)=>({f,i}))
-                .filter(p => p.f >= fMin && p.f <= fMax)
-                .map(p=>p.i);
-
-            if(!indices.length) return;
-
-            let f_Hz = indices.map(i=>ds.freq[i]);
-            let f_plot = f_Hz.map(v=>v/fScale);
-
-            let label=datasets.length>1?`${ds.name} - ${k}`:k;
-
-            let magDB = indices.map(i=>processed.magDB[i]);
-            let rl = indices.map(i=>processed.rl[i]);
-            let vs = indices.map(i=>processed.vswr[i]);
-            let ph = indices.map(i=>processed.phase[i]);
-            let gd = indices.map(i=>processed.gd[i]);
-            let z = indices.map(i=>processed.z[i]);
-            let sComplex = indices.map(i=>ds.sparams[k][i]);
-
-            magTr.push({
-                x: f_plot,
-                y: magDB,
-                name: label,
-                mode: "lines",
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Freq: %{x:.6f} " + fUnit +
-                    "<br>Mag: %{y:.3f} dB" +
-                    "<extra>" + label + "</extra>"
-            });
-
-            phaseTr.push({
-                x: f_plot,
-                y: ph.map(p=>p*180/Math.PI),
-                name: label,
-                mode: "lines",
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Freq: %{x:.6f} " + fUnit +
-                    "<br>Phase: %{y:.3f} deg" +
-                    "<extra>" + label + "</extra>"
-            });
-
-            rlTr.push({
-                x: f_plot,
-                y: rl,
-                name: label,
-                mode: "lines",
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Freq: %{x:.6f} " + fUnit +
-                    "<br>Return Loss: %{y:.3f} dB" +
-                    "<extra>" + label + "</extra>"
-            });
-
-            vswrTr.push({
-                x: f_plot,
-                y: vs,
-                name: label,
-                mode: "lines",
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Freq: %{x:.6f} " + fUnit +
-                    "<br>VSWR: %{y:.3f}" +
-                    "<extra>" + label + "</extra>"
-            });
-
-            gdTr.push({
-                x: f_plot,
-                y: gd,
-                name: label,
-                mode: "lines",
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Freq: %{x:.6f} " + fUnit +
-                    "<br>Group Delay: %{y:.3f} ns" +
-                    "<extra>" + label + "</extra>"
-            });
-
-            impTr.push({
-                x: f_plot,
-                y: z.map(v=>v.re),
-                name: label+" R",
-                mode: "lines",
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Freq: %{x:.6f} " + fUnit +
-                    "<br>R: %{y:.3f} Ω" +
-                    "<extra>" + label + "</extra>"
-            });
-
-            impTr.push({
-                x: f_plot,
-                y: z.map(v=>v.im),
-                name: label+" X",
-                mode: "lines",
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Freq: %{x:.6f} " + fUnit +
-                    "<br>X: %{y:.3f} Ω" +
-                    "<extra>" + label + "</extra>"
-            });
-
-            smithDataTraces.push({
-                x: sComplex.map(c=>c.re),
-                y: sComplex.map(c=>c.im),
-                mode:"lines",
-                name:label,
-                dsIndex: dsIndex,
-                hovertemplate:
-                    "Γ Real: %{x:.4f}" +
-                    "<br>Γ Imag: %{y:.4f}" +
-                    "<extra>" + label + "</extra>"
-            });
-        });
-    });
-
-    function layout(title){
-        return {
-            hovermode: "closest",
-            paper_bgcolor:"#111827",
-            plot_bgcolor:"#111827",
-            font:{color:"#e5e7eb"},
-            title:{ text:title, x:0.5 },
-            xaxis:{ type:scaleType, title:"Frequency ("+fUnit+")" },
-            yaxis:{ title:title },
-            legend:{
-                orientation:"v",
-                x:1.02,
-                y:1,
-                bgcolor:"#111827",
-                bordercolor:"#374151",
-                borderwidth:1,
-                font:{size:11}
+        const MathUtils = {
+            cMag: (re, im) => Math.sqrt(re * re + im * im),
+            cPhase: (re, im) => Math.atan2(im, re) * (180 / Math.PI),
+            magToDb: (mag) => 20 * Math.log10(mag + 1e-15),
+            dbToMag: (db) => Math.pow(10, db / 20),
+            cDiv: (r1, i1, r2, i2) => {
+                const den = r2 * r2 + i2 * i2;
+                return { re: (r1 * r2 + i1 * i2) / den, im: (i1 * r2 - r1 * i2) / den };
             },
-            margin:{l:60,r:180,t:60,b:60}
+            calcImpedance: (reS, imS, z0) => {
+                const zNorm = MathUtils.cDiv(1 + reS, imS, 1 - reS, -imS);
+                return { re: zNorm.re * z0, im: zNorm.im * z0 };
+            },
+            calcVSWR: (mag) => (mag >= 1) ? Infinity : (1 + mag) / (1 - mag),
+            unwrapPhase: (phaseArr) => {
+                const unwrapped = new Float64Array(phaseArr.length);
+                unwrapped[0] = phaseArr[0];
+                for (let i = 1; i < phaseArr.length; i++) {
+                    let diff = phaseArr[i] - phaseArr[i - 1];
+                    while (diff > Math.PI) diff -= 2 * Math.PI;
+                    while (diff < -Math.PI) diff += 2 * Math.PI;
+                    unwrapped[i] = unwrapped[i - 1] + diff;
+                }
+                return unwrapped;
+            },
+            calcGroupDelay: (freqHzArr, phaseDegArr) => {
+                const gd = new Float64Array(freqHzArr.length);
+                const unwrapped = MathUtils.unwrapPhase(phaseDegArr.map(p => p * Math.PI / 180));
+                gd[0] = 0;
+                for (let i = 1; i < freqHzArr.length; i++) {
+                    const df = freqHzArr[i] - freqHzArr[i - 1];
+                    gd[i] = df === 0 ? gd[i - 1] : - (unwrapped[i] - unwrapped[i - 1]) / (2 * Math.PI * df) * 1e9;
+                }
+                gd[0] = gd[1];
+                return Array.from(gd);
+            }
         };
-    }
 
-    Plotly.react("magPlot", magTr, layout(param + " - Magnitude (dB)"));
-    Plotly.react("phasePlot", phaseTr, layout(param + " - Phase (deg)"));
-    Plotly.react("rlPlot", rlTr, layout(param + " - Return Loss (dB)"));
-    Plotly.react("vswrPlot", vswrTr, layout(param + " - VSWR"));
-    Plotly.react("gdPlot", gdTr, layout(param + " - Group Delay (ns)"));
-    Plotly.react("impPlot", impTr, layout(param + " - Impedance (Ω)"));
+        class TouchstoneParser {
+            static parse(content, filename) {
+                const lines = content.split(/\r?\n/);
+                let z0 = 50, freqUnit = 'GHZ', format = 'MA', numPorts = 2;
+                const extMatch = filename.match(/\.s(\d)p$/i);
+                if (extMatch) numPorts = parseInt(extMatch[1], 10);
 
-    currentSmithDataTraces = smithDataTraces;
-    drawSmithChart();
+                const data = { Freq: [] };
+                for (let i = 1; i <= numPorts; i++)
+                    for (let j = 1; j <= numPorts; j++)
+                        data[`S${i}${j}`] = { re: [], im: [] };
 
-    attachClick();
-    drawMarkers();
-}
+                let dataBuffer = [];
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line || line.startsWith('!')) continue;
+                    if (line.startsWith('#')) {
+                        const parts = line.substring(1).trim().toUpperCase().split(/\s+/);
+                        if (parts.includes('HZ')) freqUnit = 'HZ';
+                        else if (parts.includes('KHZ')) freqUnit = 'KHZ';
+                        else if (parts.includes('MHZ')) freqUnit = 'MHZ';
+                        else freqUnit = 'GHZ';
 
-function resetRange(){
+                        if (parts.includes('MA')) format = 'MA';
+                        else if (parts.includes('DB')) format = 'DB';
+                        else if (parts.includes('RI')) format = 'RI';
 
-    if(!datasets.length) return;
+                        const rIndex = parts.indexOf('R');
+                        if (rIndex !== -1 && parts.length > rIndex + 1) z0 = parseFloat(parts[rIndex + 1]);
+                        continue;
+                    }
+                    dataBuffer.push(...line.split(/\s+/).map(parseFloat).filter(n => !isNaN(n)));
+                }
 
-    // get min/max across ALL datasets
-    let allFreq = datasets.flatMap(ds => ds.freq);
+                const valuesPerRow = 1 + 2 * (numPorts * numPorts);
+                for (let i = 0; i < dataBuffer.length; i += valuesPerRow) {
+                    if (i + valuesPerRow > dataBuffer.length) break;
+                    let freq = dataBuffer[i];
+                    if (freqUnit === 'KHZ') freq *= 1e3;
+                    else if (freqUnit === 'MHZ') freq *= 1e6;
+                    else if (freqUnit === 'GHZ') freq *= 1e9;
+                    data.Freq.push(freq);
 
-    let minF = Math.min(...allFreq);
-    let maxF = Math.max(...allFreq);
+                    let offset = 1;
+                    for (let r = 1; r <= numPorts; r++) {
+                        for (let c = 1; c <= numPorts; c++) {
+                            let v1 = dataBuffer[i + offset], v2 = dataBuffer[i + offset + 1];
+                            offset += 2;
+                            let re, im;
+                            if (format === 'RI') { re = v1; im = v2; }
+                            else if (format === 'MA') {
+                                const mag = v1, phaseRad = v2 * Math.PI / 180;
+                                re = mag * Math.cos(phaseRad); im = mag * Math.sin(phaseRad);
+                            } else if (format === 'DB') {
+                                const mag = MathUtils.dbToMag(v1), phaseRad = v2 * Math.PI / 180;
+                                re = mag * Math.cos(phaseRad); im = mag * Math.sin(phaseRad);
+                            }
+                            let pName = `S${r}${c}`;
+                            if (numPorts === 2) {
+                                if (offset === 5) pName = 'S21';
+                                else if (offset === 7) pName = 'S12';
+                            }
+                            data[pName].re.push(re);
+                            data[pName].im.push(im);
+                        }
+                    }
+                }
+                return { filename, data, info: { z0, format, freqUnit, numPorts }, visible: true };
+            }
+        }
 
-    document.getElementById("startFreq").value = formatFreqForInput(minF);
-    document.getElementById("stopFreq").value  = formatFreqForInput(maxF);
+        function computeDerivedData(dataset, param) {
+            const f = dataset.data.Freq;
+            const re = dataset.data[param].re;
+            const im = dataset.data[param].im;
+            const z0 = dataset.info.z0;
+            const n = f.length;
 
-    updateAll();
-}
+            const magDb = new Float64Array(n), phaseDeg = new Float64Array(n);
+            const vswr = new Float64Array(n), zRe = new Float64Array(n), zIm = new Float64Array(n);
 
-function smooth(arr, window=5){
-    return arr.map((v,i)=>{
-        let start = Math.max(0,i-window);
-        let end   = Math.min(arr.length-1,i+window);
-        let sum=0,count=0;
-        for(let j=start;j<=end;j++){ sum+=arr[j]; count++; }
-        return sum/count;
-    });
-}
+            for (let i = 0; i < n; i++) {
+                const mag = MathUtils.cMag(re[i], im[i]);
+                magDb[i] = MathUtils.magToDb(mag);
+                phaseDeg[i] = MathUtils.cPhase(re[i], im[i]);
+                vswr[i] = MathUtils.calcVSWR(mag);
+                const z = MathUtils.calcImpedance(re[i], im[i], z0);
+                zRe[i] = z.re; zIm[i] = z.im;
+            }
+            const gd = MathUtils.calcGroupDelay(f, Array.from(phaseDeg));
 
-/* ================= DRAW MARKERS ================= */
-
-function drawMarkers() {
-
-    if (!datasets.length) return;
-
-    let param = document.getElementById("paramSelect").value;
-    let {scale: fScale} = getFreqScale(datasets[0].freq);
-
-    // Remove old marker traces first
-    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-        let gd = document.getElementById(id);
-        if(!gd.data) return;
-
-        let markerIndices = [];
-        gd.data.forEach((tr,i)=>{
-            if(tr.name && tr.name.startsWith("MARKER_"))
-                markerIndices.push(i);
-        });
-
-        if(markerIndices.length)
-            Plotly.deleteTraces(id, markerIndices);
-    });
-
-    if (!markers.length) {
-        drawSmithChart();
-        return;
-    }
-
-    markers.forEach((m,i)=>{
-
-        let ds = datasets[m.dsIndex];
-        let f_Hz = ds.freq;
-        let processed = ds.processed[param];
-        let d = ds.sparams[param];
-
-        if(!processed || !d) return;
-
-        // Find nearest index
-        let idx = f_Hz.reduce((best,val,j)=>
-            Math.abs(val-m.freqHz)<Math.abs(f_Hz[best]-m.freqHz)?j:best,0);
-
-        let x = f_Hz[idx] / fScale;
-
-        let magVal = Math.hypot(d[idx].re, d[idx].im);
-        let magDB = 20*Math.log10(magVal);
-        let rlVal = -20*Math.log10(magVal);
-        let vs = (1+Math.min(magVal,0.999999))/(1-Math.min(magVal,0.999999));
-
-        let ph = processed.phase[idx]*180/Math.PI;
-        let gd = processed.gd[idx];
-
-        let zRe = processed.z[idx].re;
-        let zIm = processed.z[idx].im;
-
-        function makeDot(y,labelSuffix=""){
             return {
-                x:[x],
-                y:[y],
-                mode:"markers+text",
-                marker:{
-                    size:10,
-                    color:"#facc15",
-                    line:{color:"#000",width:1}
-                },
-                text:["M"+(i+1)+labelSuffix],
-                textposition:"top center",
-                name:"MARKER_"+(i+1)+""+labelSuffix,
-                showlegend:false
+                f: f, magDb: Array.from(magDb), phaseDeg: Array.from(phaseDeg),
+                vswr: Array.from(vswr), gd: gd, zRe: Array.from(zRe), zIm: Array.from(zIm),
+                re: re, im: im
             };
         }
 
-        // Add markers to plots
-        Plotly.addTraces("magPlot", makeDot(magDB));
-        Plotly.addTraces("phasePlot", makeDot(ph));
-        Plotly.addTraces("rlPlot", makeDot(rlVal));
-        Plotly.addTraces("vswrPlot", makeDot(vs));
-        Plotly.addTraces("gdPlot", makeDot(gd));
-
-        // Impedance markers (Real & Imag)
-        Plotly.addTraces("impPlot", makeDot(zRe," R"));
-        Plotly.addTraces("impPlot", makeDot(zIm," X"));
-    });
-
-    // Redraw Smith chart with markers
-    drawSmithChart();
-}
-
-function drawSmithChart(){
-
-    if(!datasets.length) return;
-
-    let ds0 = datasets[0];
-    let smithGrid = generateSmithGrid(ds0.z0);
-
-    let markerTraces = [];
-
-    if(markers.length){
-
-        let param = document.getElementById("paramSelect").value;
-
-        markers.forEach((m,i)=>{
-
-            let ds = datasets[m.dsIndex];
-            if(!ds) return;
-
-            let f_Hz = ds.freq;
-            let d = ds.sparams[param];
-            if(!d) return;
-
-            let idx = f_Hz.reduce((best,val,j)=>
-                Math.abs(val-m.freqHz) < Math.abs(f_Hz[best]-m.freqHz) ? j : best,0);
-
-            markerTraces.push({
-                x:[d[idx].re],
-                y:[d[idx].im],
-                mode:"markers+text",
-                marker:{
-                    size:12,
-                    color:"#facc15",
-                    line:{color:"#000",width:1}
-                },
-                text:["M"+(i+1)],
-                textposition:"top center",
-                showlegend:false
+        function getDynamicFreqScale() {
+            let maxF = 0;
+            AppState.datasets.filter(d => d.visible).forEach(ds => {
+                if (ds.data.Freq.length) maxF = Math.max(maxF, ds.data.Freq[ds.data.Freq.length - 1]);
             });
-        });
-    }
-
-    Plotly.react("smithPlot",
-        [...smithGrid, ...currentSmithDataTraces, ...markerTraces],
-        {
-            paper_bgcolor:"#111827",
-            plot_bgcolor:"#111827",
-            font:{color:"#e5e7eb"},
-            xaxis:{
-                range:[-1.1,1.1],
-                scaleanchor:"y",
-                showgrid:false,
-                zeroline:false
-            },
-            yaxis:{
-                range:[-1.1,1.1],
-                showgrid:false,
-                zeroline:false
-            },
-            margin:{l:40,r:40,t:40,b:40},
-            title:"Smith Chart (Γ Plane)"
-        }
-    );
-}
-
-
-/* ================= MARKERS ================= */
-
-function attachClick(){
-
-    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-
-        let plot = document.getElementById(id);
-
-        plot.removeAllListeners?.("plotly_click");
-
-        plot.on("plotly_click", function(data){
-
-            if(!datasets.length) return;
-
-            const pts = data.points;
-
-            // choose point closest to cursor vertically
-            let best = pts[0];
-            let minDist = Math.abs(pts[0].y - data.event.y);
-
-            pts.forEach(p=>{
-                let d = Math.abs(p.y - data.event.y);
-                if(d < minDist){
-                    best = p;
-                    minDist = d;
-                }
-            });
-
-            const trace = best.data;
-
-            if(trace.name && trace.name.startsWith("MARKER_")) return;
-
-            const scale = getFreqScale(datasets[0].freq).scale;
-
-            markers.push({
-                freqHz: best.x * scale,
-                dsIndex: trace.dsIndex
-            });
-
-            updateMarkerTable();
-            drawMarkers();
-
-        });
-
-    });
-}
-// Run once after DOM loaded
-//attachClick();
-
-function updateMarkerTable(){
-
-    let body=document.getElementById("markerTable");
-    body.innerHTML="";
-    if(!datasets.length || !markers.length) return;
-
-    let param=document.getElementById("paramSelect").value;
-
-    markers.forEach((m,i)=>{
-
-        let ds = datasets[m.dsIndex];
-        let f_Hz = ds.freq;
-        let d = ds.sparams[param];
-
-        let idx = f_Hz.reduce((best,val,j)=>
-            Math.abs(val-m.freqHz)<Math.abs(f_Hz[best]-m.freqHz)?j:best,0);
-
-        let {scale: fScale, unit: fUnit} = getFreqScale(f_Hz);
-
-        let processed = ds.processed[param];
-        let ph = processed.phase;
-        let gd = processed.gd;
-        let z = processed.z;
-
-        let mval=mag(d[idx]);
-        let vs=(1+Math.min(mval,0.999999))/(1-Math.min(mval,0.999999));
-
-        let gammaRe = d[idx].re;
-        let gammaIm = d[idx].im;
-
-        let den = (1 - gammaRe)**2 + gammaIm**2;
-
-        let zRe = ds.z0 * (((1 + gammaRe)*(1 - gammaRe) + gammaIm*gammaIm) / den);
-        let zIm = ds.z0 * ((2 * gammaIm) / den);
-
-        let tr=document.createElement("tr");
-        tr.innerHTML=`
-<td>M${i+1}</td>
-<td>${(f_Hz[idx]/fScale).toFixed(6)} ${fUnit}</td>
-<td>${(20*Math.log10(mval)).toFixed(3)}</td>
-<td>${(ph[idx]*180/Math.PI).toFixed(3)}</td>
-<td>${vs.toFixed(3)}</td>
-<td>${gd[idx].toFixed(3)}</td>
-<td>${zRe.toFixed(2)} + j${zIm.toFixed(2)}</td>
-<td><button onclick="deleteMarker(${i})">X</button></td>`;
-        body.appendChild(tr);
-    });
-}
-
-function deleteMarker(i){
-    markers.splice(i,1);
-    updateMarkerTable();
-    drawMarkers();
-}
-
-function clearMarkers(){ 
-    markers = []; 
-    bwMarkers = []; 
-
-    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-        Plotly.relayout(id,{shapes:[]});
-    });
-
-    updateMarkerTable();
-    updateAll();  // redraw smith without marker dots
-}
-
-
-// const panel = document.getElementById("controlPanel");
-
-// panel.style.top = "0px";
-// panel.style.left = "500px";
-
-// let isDragging = false;
-// let shiftX = 0;
-// let shiftY = 0;
-
-// panel.addEventListener("mousedown", function(e) {
-//     isDragging = true;
-
-//     const rect = panel.getBoundingClientRect();
-//     shiftX = e.clientX - rect.left;
-//     shiftY = e.clientY - rect.top;
-
-//     document.addEventListener("mousemove", onMouseMove);
-// });
-
-// function onMouseMove(e) {
-//     if (!isDragging) return;
-
-//     panel.style.left = e.pageX - shiftX + "px";
-//     panel.style.top  = e.pageY - shiftY + "px";
-// }
-
-// document.addEventListener("mouseup", function() {
-//     isDragging = false;
-//     document.removeEventListener("mousemove", onMouseMove);
-// });
-
-// panel.ondragstart = () => false;
-
-const bwColors = [
-    "#00FF00", // bright green
-    "#00BFFF", // deep sky blue
-    "#FFA500", // orange
-    "#FF69B4", // hot pink
-    "#8A2BE2", // blue violet
-    "#FF4500"  // orange red
-];
-
-/* ================= SMITH GRID ================= */
-
-function generateSmithGrid(z0 = 50) {
-
-    const traces = [];
-
-    const rList = [0, 0.2, 0.5, 1, 2, 5];      // constant resistance
-    const xList = [0.2, 0.5, 1, 2, 5];         // constant reactance
-
-    const xSweep = [];
-    for (let x = -10; x <= 10; x += 0.01) xSweep.push(x);
-
-    const rSweep = [];
-    for (let r = 0; r <= 10; r += 0.01) rSweep.push(r);
-
-    // ---- Constant Resistance Circles ----
-    rList.forEach(r => {
-
-        let gammaRe = [];
-        let gammaIm = [];
-
-        xSweep.forEach(x => {
-
-            let z = { re: r, im: x };
-            let denom = (z.re + 1)**2 + z.im**2;
-
-            let gr = ((z.re - 1)*(z.re + 1) + z.im**2) / denom;
-            let gi = (2 * z.im) / denom;
-
-            gammaRe.push(gr);
-            gammaIm.push(gi);
-        });
-
-        traces.push({
-            x: gammaRe,
-            y: gammaIm,
-            mode: "lines",
-            line: { color: "#374151", width: 1 },
-            hoverinfo: "skip",
-            showlegend: false
-        });
-    });
-
-    // ---- Constant Reactance Arcs ----
-    xList.forEach(x => {
-
-        [-1, 1].forEach(sign => {
-
-            let gammaRe = [];
-            let gammaIm = [];
-
-            rSweep.forEach(r => {
-
-                let z = { re: r, im: sign * x };
-                let denom = (z.re + 1)**2 + z.im**2;
-
-                let gr = ((z.re - 1)*(z.re + 1) + z.im**2) / denom;
-                let gi = (2 * z.im) / denom;
-
-                gammaRe.push(gr);
-                gammaIm.push(gi);
-            });
-
-            traces.push({
-                x: gammaRe,
-                y: gammaIm,
-                mode: "lines",
-                line: { color: "#374151", width: 1 },
-                hoverinfo: "skip",
-                showlegend: false
-            });
-        });
-    });
-
-    // ---- Outer Circle ----
-    let circleRe = [];
-    let circleIm = [];
-
-    for (let t = 0; t <= 2*Math.PI; t += 0.01) {
-        circleRe.push(Math.cos(t));
-        circleIm.push(Math.sin(t));
-    }
-
-    traces.push({
-        x: circleRe,
-        y: circleIm,
-        mode: "lines",
-        line: { color: "#6b7280", width: 2 },
-        hoverinfo: "skip",
-        showlegend: false
-    });
-
-    return traces;
-}
-
-function findSegments(indices){
-    let segments = [];
-    let start = indices[0];
-
-    for(let i=1;i<indices.length;i++){
-        if(indices[i] !== indices[i-1] + 1){
-            segments.push([start, indices[i-1]]);
-            start = indices[i];
-        }
-    }
-
-    segments.push([start, indices[indices.length-1]]);
-    return segments;
-}
-/* ================= BANDWIDTH ================= */
-function measureBandwidth(){
-    if(!datasets.length) return;
-
-    const param = document.getElementById("paramSelect").value;
-    const bwMode = document.getElementById("bwMode");
-
-    // Auto-select IL or RL based on parameter
-    bwMode.value = (param[1] !== param[2]) ? "il" : "rl";
-    const mode = bwMode.value;
-
-    const threshold = parseFloat(document.getElementById("rlThreshold").value);
-
-    const table = document.getElementById("bwResultTable");
-    const tbody = table.querySelector("tbody");
-    tbody.innerHTML = "";
-    let bwMarkersAll = [];
-
-    datasets.forEach((ds, idx) => {
-
-        const f_Hz = ds.freq;
-        const {scale: fScale, unit: fUnit} = getFreqScale(f_Hz);
-        const f_plot = f_Hz.map(v => v / fScale);
-
-        let indices = [];
-        const color = bwColors[idx % bwColors.length];
-
-        const isTransmission = param[1] !== param[2];
-
-        if(mode === "il" && isTransmission){
-            const magDB = ds.sparams[param].map(c => 20*Math.log10(mag(c)));
-            const peak = Math.max(...magDB);
-            const target = peak - threshold;
-            indices = magDB.map((v,i)=>v>=target?i:-1).filter(i=>i>=0);
-        } else {
-            const rl = ds.sparams[param].map(c => -20*Math.log10(mag(c)));
-            indices = rl.map((v,i)=>v>=threshold?i:-1).filter(i=>i>=0);
+            if (maxF >= 1e9) return { div: 1e9, unit: 'GHz' };
+            if (maxF >= 1e6) return { div: 1e6, unit: 'MHz' };
+            if (maxF >= 1e3) return { div: 1e3, unit: 'kHz' };
+            return { div: 1, unit: 'Hz' };
         }
 
-        if(indices.length){
+        function getLayout(title, xTitle, yTitle, isDark) {
+            return {
+                title: { text: title, font: { color: isDark ? '#fff' : '#000', size: 14 } },
+                paper_bgcolor: 'transparent', plot_bgcolor: isDark ? '#1e293b' : '#fff',
+                margin: { t: 40, r: 20, b: 40, l: 60 },
+                xaxis: { title: xTitle, type: AppState.freqScaleType, gridcolor: isDark ? '#334155' : '#e2e8f0', color: isDark ? '#cbd5e1' : '#475569' },
+                yaxis: { title: yTitle, gridcolor: isDark ? '#334155' : '#e2e8f0', color: isDark ? '#cbd5e1' : '#475569' },
+                showlegend: true, hovermode: 'closest',
+                legend: { orientation: 'h', y: -0.2, font: { color: isDark ? '#cbd5e1' : '#475569' } },
+                shapes: []
+            };
+        }
 
-            const segments = findSegments(indices);
+        function renderPlots() {
+            const isDark = document.documentElement.classList.contains('dark');
+            const freqScale = getDynamicFreqScale();
+            const xTitle = `Frequency (${freqScale.unit})`;
 
-            segments.forEach(seg => {
+            const traces = { mag: [], phase: [], gd: [], vswr: [], z: [], smith: [] };
+            let colorIndex = 0;
+            const paramsToRender = AppState.selectedParam === 'All' ? null : AppState.selectedParam;
 
-                const f1Hz = f_Hz[seg[0]];
-                const f2Hz = f_Hz[seg[1]];
+            AppState.datasets.filter(d => d.visible).forEach(ds => {
+                const keys = paramsToRender ? [paramsToRender] : Object.keys(ds.data).filter(k => k.startsWith('S'));
+                keys.forEach(param => {
+                    if (!ds.data[param]) return;
+                    const comp = computeDerivedData(ds, param);
+                    const color = AppState.colorPalette[colorIndex % AppState.colorPalette.length];
+                    const name = `${ds.filename} - ${param}`;
+                    const fScaled = comp.f.map(hz => hz / freqScale.div);
 
-                const bwHz = f2Hz - f1Hz;
-                const magDb = ds.processed[param].magDB;
+                    const commonOpts = {
+                        x: fScaled, name: name, type: 'scatter', mode: 'lines', line: { color },
+                        customdata: comp.f, meta: { filename: ds.filename, param: param }
+                    };
 
-                const linearity = calculateLinearity(
-                    f_Hz,
-                    magDb,
-                    f1Hz,
-                    f2Hz
-                );
-                // Format bandwidth nicely
-                let bwDisplay;
-                if (bwHz >= 1e9)      bwDisplay = (bwHz/1e9).toFixed(3) + " GHz";
-                else if (bwHz >= 1e6) bwDisplay = (bwHz/1e6).toFixed(3) + " MHz";
-                else if (bwHz >= 1e3) bwDisplay = (bwHz/1e3).toFixed(3) + " kHz";
-                else                  bwDisplay = bwHz.toFixed(3) + " Hz";
+                    traces.mag.push({ ...commonOpts, y: comp.magDb });
+                    traces.phase.push({ ...commonOpts, y: comp.phaseDeg });
+                    traces.gd.push({ ...commonOpts, y: comp.gd });
+                    traces.vswr.push({ ...commonOpts, y: comp.vswr });
 
+                    const zMag = comp.zRe.map((re, i) => MathUtils.cMag(re, comp.zIm[i]));
+                    traces.z.push({ ...commonOpts, y: zMag });
 
-                const row = document.createElement("tr");
-                row.style.cursor = "pointer";
+                    traces.smith.push({
+                        type: 'scattersmith', real: comp.re, imag: comp.im, name: name,
+                        marker: { color, size: 2 }, line: { color }
+                    });
+                    colorIndex++;
+                });
+            });
 
-                row.innerHTML = `
-                    <td style="color:${color}">${ds.name}</td>
-                    <td>${(f1Hz/fScale).toFixed(6)} ${fUnit}</td>
-                    <td>${(f2Hz/fScale).toFixed(6)} ${fUnit}</td>
-                    <td>±${linearity} dB</td>
-                    <td><b>${bwDisplay}</b></td>
+            if (AppState.markers.length > 0) {
+                const markerX = AppState.markers.map(m => m.freqHz / freqScale.div);
+                const markerTrace = (yVals, name) => ({
+                    x: markerX, y: yVals, type: 'scatter', mode: 'markers', name: 'Markers',
+                    marker: { color: 'red', size: 10, symbol: 'cross' }, hoverinfo: 'none', showlegend: false
+                });
+
+                traces.mag.push(markerTrace(AppState.markers.map(m => m.magDb), 'M'));
+                traces.phase.push(markerTrace(AppState.markers.map(m => m.phaseDeg), 'M'));
+                traces.gd.push(markerTrace(AppState.markers.map(m => m.gd), 'M'));
+                traces.vswr.push(markerTrace(AppState.markers.map(m => m.vswr === Infinity ? null : m.vswr), 'M'));
+                traces.z.push(markerTrace(AppState.markers.map(m => MathUtils.cMag(m.zRe, m.zIm)), 'M'));
+
+                traces.smith.push({
+                    type: 'scattersmith', real: AppState.markers.map(m => m.reS), imag: AppState.markers.map(m => m.imS),
+                    mode: 'markers', marker: { color: 'red', size: 10, symbol: 'cross' }, showlegend: false, hoverinfo: 'none'
+                });
+            }
+
+            const layouts = {
+                mag: getLayout('Magnitude', xTitle, 'Magnitude (dB)', isDark),
+                phase: getLayout('Phase', xTitle, 'Phase (deg)', isDark),
+                gd: getLayout('Group Delay', xTitle, 'Time (ns)', isDark),
+                vswr: getLayout('VSWR', xTitle, 'Ratio', isDark),
+                z: getLayout('Impedance (Mag)', xTitle, '|Z| (Ω)', isDark)
+            };
+
+            if (AppState.bwHighlights.length > 0) {
+                const shapes = AppState.bwHighlights.map(bw => ({
+                    type: 'rect', xref: 'x', yref: 'paper',
+                    x0: bw.fStart / freqScale.div, x1: bw.fStop / freqScale.div,
+                    y0: 0, y1: 1, fillcolor: 'rgba(234, 179, 8, 0.2)', line: { width: 0 }
+                }));
+                Object.values(layouts).forEach(l => l.shapes = shapes);
+            }
+
+            Plotly.react('plot-mag', traces.mag, layouts.mag, { responsive: true });
+            Plotly.react('plot-phase', traces.phase, layouts.phase, { responsive: true });
+            Plotly.react('plot-gd', traces.gd, layouts.gd, { responsive: true });
+            Plotly.react('plot-vswr', traces.vswr, layouts.vswr, { responsive: true });
+            Plotly.react('plot-z', traces.z, layouts.z, { responsive: true });
+
+            const smithLayout = {
+                title: { text: 'Smith Chart', font: { color: isDark ? '#fff' : '#000', size: 14 } },
+                paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', margin: { t: 40, r: 20, b: 40, l: 20 },
+                polar: { bgcolor: isDark ? '#1e293b' : '#fff' },
+                smith: { realaxis: { gridcolor: isDark ? '#475569' : '#cbd5e1' }, imaginaryaxis: { gridcolor: isDark ? '#475569' : '#cbd5e1' } },
+                showlegend: true, hovermode: 'closest', legend: { orientation: 'h', y: -0.1, font: { color: isDark ? '#cbd5e1' : '#475569' } }
+            };
+            Plotly.react('plot-smith', traces.smith, smithLayout, { responsive: true });
+
+            attachChartListenersOnce();
+            renderMarkerTable();
+        }
+
+        function attachChartListenersOnce() {
+            if (listenersAttached) return;
+            const linearPlots = ['plot-mag', 'plot-phase', 'plot-gd', 'plot-vswr', 'plot-z'];
+
+            // Sync Logic
+            linearPlots.forEach(id => {
+                const gd = document.getElementById(id);
+                gd.on('plotly_relayout', function (eventData) {
+                    if (isSyncing) return;
+                    if (eventData['xaxis.range[0]'] || eventData['xaxis.autorange']) {
+                        isSyncing = true;
+                        const update = { 'xaxis.range': [eventData['xaxis.range[0]'], eventData['xaxis.range[1]']] };
+                        if (eventData['xaxis.autorange']) update['xaxis.autorange'] = true;
+                        Promise.all(linearPlots.filter(pid => pid !== id).map(pid => Plotly.relayout(pid, update)))
+                            .then(() => { isSyncing = false; });
+                    }
+                });
+            });
+
+            // Marker Click Logic
+            PLOT_DIVS.forEach(id => {
+                const gd = document.getElementById(id);
+                gd.on('plotly_click', function (data) {
+                    const pt = data.points[0];
+                    if (pt.data.name === 'Markers') return;
+
+                    const filename = pt.data.meta?.filename;
+                    const param = pt.data.meta?.param;
+                    if (!filename || !param) return;
+
+                    const ds = AppState.datasets.find(d => d.filename === filename);
+                    if (!ds) return;
+
+                    const comp = computeDerivedData(ds, param);
+
+                    let idx = pt.pointIndex;
+                    if (idx === undefined && pt.customdata) {
+                        const exactFreq = pt.customdata;
+                        idx = comp.f.indexOf(exactFreq);
+                    }
+                    if (idx === undefined || idx === -1) return;
+
+                    addMarker({
+                        id: Date.now().toString().slice(-5),
+                        dataset: filename, param: param,
+                        freqHz: comp.f[idx],
+                        magDb: comp.magDb[idx],
+                        phaseDeg: comp.phaseDeg[idx], vswr: comp.vswr[idx],
+                        gd: comp.gd[idx], zRe: comp.zRe[idx], zIm: comp.zIm[idx],
+                        reS: comp.re[idx], imS: comp.im[idx]
+                    });
+                });
+            });
+
+            listenersAttached = true;
+        }
+
+        function addMarker(m) {
+            AppState.markers.push(m);
+            renderPlots();
+        }
+
+        function removeMarker(id) {
+            AppState.markers = AppState.markers.filter(m => m.id !== id);
+            renderPlots();
+        }
+
+        function renderMarkerTable() {
+            DOM.markerTableBody.innerHTML = '';
+            if (AppState.markers.length === 0) {
+                DOM.markerTableBody.innerHTML = `<tr><td colspan="10" class="text-center text-gray-500">No markers added.</td></tr>`;
+                return;
+            }
+            const fScale = getDynamicFreqScale();
+
+            AppState.markers.forEach(m => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="font-mono text-sm">${m.id}</td>
+                    <td>${Utils.escapeHTML(m.dataset)}</td>
+                    <td>${Utils.escapeHTML(m.param)}</td>
+                    <td>${(m.freqHz / fScale.div).toFixed(4)} ${fScale.unit}</td>
+                    <td>${m.magDb.toFixed(3)} dB</td>
+                    <td>${m.phaseDeg.toFixed(2)}°</td>
+                    <td>${m.vswr === Infinity ? '∞' : m.vswr.toFixed(3)}</td>
+                    <td>${m.gd.toFixed(3)} ns</td>
+                    <td>${m.zRe.toFixed(1)} ${m.zIm >= 0 ? '+' : '-'} j${Math.abs(m.zIm).toFixed(1)} Ω</td>
+                    <td><button data-action="remove-marker" data-id="${m.id}" class="text-red-500 hover:text-red-700 font-bold" aria-label="Remove Marker">X</button></td>
                 `;
+                DOM.markerTableBody.appendChild(tr);
+            });
+        }
 
-                row.dataset.start = f1Hz;
-                row.dataset.stop  = f2Hz;
+        function calculateBandwidth() {
+            // FIX: Take the absolute value to natively handle both positive and negative inputs gracefully
+            let rawThreshold = parseFloat(DOM.bwThreshold.value);
+            if (isNaN(rawThreshold) || rawThreshold === 0) return alert("Invalid threshold. Please enter a non-zero value.");
 
-                row.onclick = function() {
-                    document.getElementById("startFreq").value = formatFreqForInput(parseFloat(this.dataset.start));
-                    document.getElementById("stopFreq").value  = formatFreqForInput(parseFloat(this.dataset.stop));
-                    this.style.background = "#2563eb";
-                    setTimeout(()=>this.style.background="", 300);
-                };
+            const threshold = Math.abs(rawThreshold); // e.g. -3 becomes 3, subtracting 3dB from the peak
 
-                tbody.appendChild(row);
+            DOM.bwTableBody.innerHTML = '';
+            AppState.bwHighlights = [];
+            let hasResults = false;
+            const fScale = getDynamicFreqScale();
+            const paramsToProcess = AppState.selectedParam === 'All' ? ['S11', 'S21', 'S12', 'S22'] : [AppState.selectedParam];
 
-                bwMarkersAll.push({dataset: ds.name, f1: f1Hz/fScale, f2: f2Hz/fScale, color});
+            AppState.datasets.filter(d => d.visible).forEach(ds => {
+                paramsToProcess.forEach(param => {
+                    if (!ds.data[param]) return;
+                    const comp = computeDerivedData(ds, param);
+
+                    let maxMag = -Infinity, maxIdx = 0;
+                    comp.magDb.forEach((val, i) => { if (val > maxMag) { maxMag = val; maxIdx = i; } });
+                    const targetVal = maxMag - threshold;
+
+                    let startIdx = maxIdx;
+                    while (startIdx > 0 && comp.magDb[startIdx - 1] >= targetVal) {
+                        startIdx--;
+                    }
+
+                    let endIdx = maxIdx;
+                    while (endIdx < comp.magDb.length - 1 && comp.magDb[endIdx + 1] >= targetVal) {
+                        endIdx++;
+                    }
+
+                    if (startIdx !== endIdx) {
+                        hasResults = true;
+                        const fStart = comp.f[startIdx];
+                        const fStop = comp.f[endIdx];
+                        const bw = fStop - fStart;
+                        AppState.bwHighlights.push({ fStart, fStop });
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td>${Utils.escapeHTML(ds.filename)}</td>
+                            <td>${Utils.escapeHTML(param)}</td>
+                            <td>${(comp.f[maxIdx] / fScale.div).toFixed(4)} ${fScale.unit} (${maxMag.toFixed(2)} dB)</td>
+                            <td>${(fStart / fScale.div).toFixed(4)} ${fScale.unit}</td>
+                            <td>${(fStop / fScale.div).toFixed(4)} ${fScale.unit}</td>
+                            <td>- ${threshold} dB</td>
+                            <td class="font-bold text-brand-600 dark:text-brand-400">${(bw / fScale.div).toFixed(4)} ${fScale.unit}</td>
+                        `;
+                        DOM.bwTableBody.appendChild(tr);
+                    }
+                });
             });
 
-        } else {
-
-            const row = document.createElement("tr");
-            row.innerHTML = `
-                <td style="color:#FF0000">${ds.name}</td>
-                <td colspan="3">No valid region</td>
-            `;
-            tbody.appendChild(row);
+            if (!hasResults) DOM.bwTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500">No bandwidth found within threshold.</td></tr>`;
+            if (AppState.bwHighlights.length > 0) {
+                DOM.clearBwBtn.classList.remove('hidden');
+                DOM.clearBwBtn.disabled = false;
+            }
+            renderPlots();
         }
-    });
 
-    // Draw vertical lines on all plots
-    ["magPlot","phasePlot","rlPlot","vswrPlot","gdPlot","impPlot"].forEach(id=>{
-        let shapes = [];
-        bwMarkersAll.forEach(bw=>{
-            shapes.push(
-                { type: 'line', x0: bw.f1, x1: bw.f1, y0: 0, y1: 1, yref:'paper', line:{color:bw.color,width:2,dash:'dot'} },
-                { type: 'line', x0: bw.f2, x1: bw.f2, y0: 0, y1: 1, yref:'paper', line:{color:bw.color,width:2,dash:'dot'} }
-            );
+        DOM.clearBwBtn.addEventListener('click', () => {
+            AppState.bwHighlights = [];
+            DOM.bwTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td></tr>`;
+            DOM.clearBwBtn.classList.add('hidden');
+            renderPlots();
         });
-        Plotly.relayout(id, {shapes});
-    });
 
-    // Save markers globally
-    bwMarkers = bwMarkersAll.flatMap(b => [b.f1, b.f2]);
-}
-
-document.getElementById("paramSelect").onchange = () => {
-    let param = document.getElementById("paramSelect").value;
-    let bwMode = document.getElementById("bwMode");
-    bwMode.value = (param[1] !== param[2]) ? "il" : "rl"; // auto set mode
-    updateAll();
-};
-
-function calculateLinearity(freq, magDb, startFreq, stopFreq) {
-    const indices = [];
-
-    for (let i = 0; i < freq.length; i++) {
-        if (freq[i] >= startFreq && freq[i] <= stopFreq) {
-            indices.push(i);
-        }
-    }
-
-    const x = indices.map(i => freq[i]);
-    const y = indices.map(i => magDb[i]);
-
-    // Linear regression
-    const n = x.length;
-    const sumX = x.reduce((a,b)=>a+b,0);
-    const sumY = y.reduce((a,b)=>a+b,0);
-    const sumXY = x.reduce((a,b,i)=>a + b*y[i],0);
-    const sumX2 = x.reduce((a,b)=>a + b*b,0);
-
-    const slope = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
-    const intercept = (sumY - slope*sumX) / n;
-
-    // Calculate deviation
-    let maxDev = 0;
-    for (let i = 0; i < n; i++) {
-        const fitted = slope*x[i] + intercept;
-        const dev = Math.abs(y[i] - fitted);
-        if (dev > maxDev) maxDev = dev;
-    }
-
-    return maxDev.toFixed(3); // in dB
-}
-
-/* ================= File DROP ================= */
-function handleFiles(files){
-
-    if(!files.length) return;
-
-    datasets = [];
-    let loaded = 0;
-
-    for(let file of files){
-
-        if(!file.name.match(/\.s\d+p$/i)) continue;
-
-        let reader = new FileReader();
-
-        reader.onload = function(ev){
-
-            let ds = parseTouchstone(ev.target.result, file.name);
-            if(!ds) return;
-
-            processDataset(ds);
-            datasets.push(ds);
-
-            loaded++;
-
-            if(loaded === files.length){
-
-                populateParams();
-
-                let minF = Math.min(...datasets[0].freq);
-                let maxF = Math.max(...datasets[0].freq);
-
-                document.getElementById("startFreq").value = formatFreqForInput(minF);
-                document.getElementById("stopFreq").value  = formatFreqForInput(maxF);
-
-                updateAll();
+        DOM.fileInput.addEventListener('change', async (e) => {
+            const files = Array.from(e.target.files);
+            if (!files.length) return;
+            for (const file of files) {
+                const text = await file.text();
+                try {
+                    AppState.datasets.push(TouchstoneParser.parse(text, file.name));
+                } catch (err) { alert(`Failed to parse ${file.name}`); }
             }
-        };
+            updateControlsState();
+            updateSidebar();
+            updateParamDropdown();
+            renderPlots();
+            DOM.fileInput.value = '';
+        });
 
-        reader.readAsText(file);
-    }
-}
-
-
-let overlay;
-
-window.addEventListener("DOMContentLoaded", () => {
-
-    const overlay = document.getElementById("globalDropOverlay");
-
-    window.addEventListener("dragover", (e) => {
-        e.preventDefault();
-        overlay.classList.remove("hidden");
-    });
-
-    window.addEventListener("dragleave", (e) => {
-        if (e.target === document.documentElement) {
-            overlay.classList.add("hidden");
+        function updateControlsState() {
+            const isEmpty = AppState.datasets.length === 0;
+            DOM.paramSelect.disabled = isEmpty;
+            DOM.freqScaleSelect.disabled = isEmpty;
+            DOM.bwThreshold.disabled = isEmpty;
+            DOM.calcBwBtn.disabled = isEmpty;
+            DOM.clearDataBtn.classList.toggle('hidden', isEmpty);
         }
-    });
 
-    window.addEventListener("drop", (e) => {
-        e.preventDefault();
-        overlay.classList.add("hidden");
-
-        const validFiles = Array.from(e.dataTransfer.files)
-            .filter(file => file.name.match(/\.s\d+p$/i));
-
-        if (validFiles.length) {
-            handleFiles(validFiles);
-        } else {
-            alert("Please drop valid Touchstone files (.s1p, .s2p, etc.)");
-        }
-    });
-
-});
-
-function formatEngineering(freqHz) {
-    const abs = Math.abs(freqHz);
-
-    if (abs >= 1e9)  return (freqHz / 1e9).toFixed(3) + " GHz";
-    if (abs >= 1e6)  return (freqHz / 1e6).toFixed(3) + " MHz";
-    if (abs >= 1e3)  return (freqHz / 1e3).toFixed(3) + " kHz";
-    return freqHz.toFixed(3) + " Hz";
-}
-
-/* ================= LOAD DEMO S5P ================= */
-async function loadDemoFile() {
-    try {
-
-        datasets = [];
-
-        const files = ["bpf1.s2p", "bpf2.s2p"];
-
-        for (const file of files) {
-
-            const response = await fetch(file);
-            if (!response.ok) {
-                console.error("Cannot load:", file);
-                continue;
+        function updateSidebar() {
+            if (AppState.datasets.length === 0) {
+                DOM.datasetList.innerHTML = `<li class="text-gray-400 italic">No files loaded.</li>`;
+                return;
             }
-
-            const text = await response.text();
-            const ds = parseTouchstone(text, file);
-            if (!ds) continue;
-
-            processDataset(ds);
-            datasets.push(ds);
+            DOM.datasetList.innerHTML = AppState.datasets.map(d => `
+                <li class="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                    <input type="checkbox" checked data-action="toggle-dataset" data-filename="${Utils.escapeHTML(d.filename)}" class="w-4 h-4 text-brand-600 bg-gray-100 border-gray-300 rounded focus:ring-brand-500 dark:focus:ring-brand-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer">
+                    <span class="truncate" title="${Utils.escapeHTML(d.filename)}">${Utils.escapeHTML(d.filename)}</span>
+                    <span class="text-xs text-gray-400 ml-auto flex-shrink-0">(${d.info.numPorts}-port)</span>
+                </li>
+            `).join('');
         }
 
-        if (!datasets.length) return;
+        function updateParamDropdown() {
+            const allParams = new Set();
+            AppState.datasets.forEach(ds => Object.keys(ds.data).forEach(k => { if (k.startsWith('S')) allParams.add(k); }));
+            const currentVal = DOM.paramSelect.value;
+            let options = `<option value="All">All Parameters</option>`;
+            Array.from(allParams).sort().forEach(p => options += `<option value="${p}">${p}</option>`);
+            DOM.paramSelect.innerHTML = options;
+            DOM.paramSelect.value = allParams.has(currentVal) ? currentVal : 'All';
+        }
 
-        populateParams();
+        DOM.paramSelect.addEventListener('change', (e) => { AppState.selectedParam = e.target.value; renderPlots(); });
+        DOM.freqScaleSelect.addEventListener('change', (e) => { AppState.freqScaleType = e.target.value; renderPlots(); });
 
-        let minF = Math.min(...datasets[0].freq);
-        let maxF = Math.max(...datasets[0].freq);
+        DOM.clearDataBtn.addEventListener('click', () => {
+            AppState.datasets = []; AppState.markers = []; AppState.bwHighlights = [];
+            updateControlsState();
+            updateSidebar(); updateParamDropdown(); renderMarkerTable();
+            DOM.clearBwBtn.classList.add('hidden');
+            DOM.bwTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td></tr>`;
+            PLOT_DIVS.forEach(id => Plotly.purge(id));
+            listenersAttached = false;
+        });
 
-        document.getElementById("startFreq").value = formatFreqForInput(minF);
-        document.getElementById("stopFreq").value = formatFreqForInput(maxF);
+        DOM.resetZoomBtn.addEventListener('click', () => {
+            PLOT_DIVS.filter(id => id !== 'plot-smith').forEach(id => {
+                if (document.getElementById(id).data) {
+                    Plotly.relayout(id, { 'xaxis.autorange': true, 'yaxis.autorange': true });
+                }
+            });
+            if (document.getElementById('plot-smith').data) {
+                Plotly.relayout('plot-smith', {
+                    'smith.realaxis.autorange': true,
+                    'smith.imaginaryaxis.autorange': true
+                });
+            }
+        });
 
-        updateAll();
+        DOM.calcBwBtn.addEventListener('click', calculateBandwidth);
 
-        console.log("Multiple demo files loaded.");
+        function toggleTheme() {
+            AppState.isDark = !AppState.isDark;
+            document.documentElement.classList.toggle('dark', AppState.isDark);
+            document.getElementById('moonIcon').classList.toggle('hidden', AppState.isDark);
+            document.getElementById('sunIcon').classList.toggle('hidden', !AppState.isDark);
+            if (AppState.datasets.length > 0) renderPlots();
+        }
+        DOM.themeToggle.addEventListener('click', toggleTheme);
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) toggleTheme();
 
-    } catch (err) {
-        console.error("Demo loading error:", err);
-    }
-}
-/* Auto load demo when page opens */
-window.addEventListener("DOMContentLoaded", loadDemoFile);
-	
-</script>
+        // Print Logic Handling
+        let wasDarkBeforePrint = false;
+
+        window.addEventListener('beforeprint', () => {
+            wasDarkBeforePrint = AppState.isDark;
+            if (wasDarkBeforePrint) {
+                toggleTheme(); // Temporarily switch to light mode for cleaner printing
+            }
+        });
+
+        window.addEventListener('afterprint', () => {
+            if (wasDarkBeforePrint && !AppState.isDark) {
+                toggleTheme(); // Restore user's preferred theme
+            }
+        });
+
+        DOM.printBtn.addEventListener('click', () => {
+            window.print();
+        });
+
+        // Event Delegation for dynamic elements
+        DOM.datasetList.addEventListener('change', (e) => {
+            if (e.target.dataset.action === 'toggle-dataset') {
+                const ds = AppState.datasets.find(d => d.filename === e.target.dataset.filename);
+                if (ds) { ds.visible = !ds.visible; renderPlots(); }
+            }
+        });
+
+        DOM.markerTableBody.addEventListener('click', (e) => {
+            const btn = e.target.closest('button[data-action="remove-marker"]');
+            if (btn) {
+                removeMarker(btn.dataset.id);
+            }
+        });
+
+        document.querySelectorAll('.fullscreen-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const targetId = btn.getAttribute('data-target');
+                const parent = btn.parentElement;
+                const isFull = parent.classList.toggle('fullscreen-active');
+                btn.innerHTML = isFull ? '✖' : '⛶';
+                setTimeout(() => { Plotly.Plots.resize(targetId); }, 50);
+            });
+        });
+
+        window.addEventListener('resize', () => {
+            PLOT_DIVS.forEach(id => { if (document.getElementById(id).data) Plotly.Plots.resize(id); });
+        });
+
+        // Initializer
+        updateControlsState();
+
+    </script>
 </body>
+
 </html>
