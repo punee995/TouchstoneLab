@@ -208,12 +208,34 @@
 
             <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                 <h3 class="text-sm font-semibold mb-3">Bandwidth Search</h3>
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Linearity Threshold (+/- dB)</label>
-                <input type="number" id="bwThreshold" disabled value="-3" step="0.1"
+
+                <!-- Mode selector -->
+                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Measurement Mode</label>
+                <div class="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-500 mb-3 text-xs font-medium" id="bwModeGroup">
+                    <button data-mode="passband"
+                        class="bw-mode-btn flex-1 py-1.5 px-1 bg-brand-500 text-white transition-colors"
+                        title="S21, S12, S31… — find the peak and measure where curve stays within threshold">
+                        📡 BW / Gain
+                    </button>
+                    <button data-mode="returnloss"
+                        class="bw-mode-btn flex-1 py-1.5 px-1 bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 transition-colors"
+                        title="S11, S22, S33… — find the notch (deepest return loss) and measure where curve stays below threshold">
+                        🔁 Return Loss
+                    </button>
+                </div>
+
+                <!-- Dynamic hint -->
+                <p id="bwModeHint" class="text-xs text-gray-400 dark:text-gray-400 mb-2 leading-tight">
+                    Measures <strong>S21/S12/Sij (i≠j)</strong> passband: region where magnitude stays within <em>threshold</em> dB of the peak.
+                </p>
+
+                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1" id="bwThresholdLabel">Threshold (dB from peak)</label>
+                <input type="number" id="bwThreshold" disabled value="3" step="0.1"
                     class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2 mb-3 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+
                 <button id="calcBwBtn" disabled
                     class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg text-sm px-4 py-2 transition-colors">Calculate
-                    & Highlight BW</button>
+                    &amp; Highlight</button>
                 <button id="clearBwBtn" disabled
                     class="w-full mt-2 bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-white font-medium rounded-lg text-sm px-4 py-2 transition-colors hidden">Clear
                     Highlight</button>
@@ -285,6 +307,12 @@
                             data-target="plot-smith" aria-label="Toggle Fullscreen">⛶</button>
                         <div id="plot-smith" class="chart-container"></div>
                     </div>
+                    <div
+                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
+                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                            data-target="plot-3d-gd" aria-label="Toggle Fullscreen">⛶</button>
+                        <div id="plot-3d-gd" class="chart-container"></div>
+                    </div>
                 </div>
 
                 <div
@@ -325,16 +353,17 @@
                             <tr>
                                 <th>Dataset</th>
                                 <th>Parameter</th>
-                                <th>Peak Freq</th>
+                                <th>Type</th>
+                                <th>Peak / Notch Freq</th>
                                 <th>BW Start Freq</th>
                                 <th>BW Stop Freq</th>
-                                <th>Threshold Drop</th>
-                                <th>Overall Bandwidth</th>
+                                <th>Threshold</th>
+                                <th>Bandwidth</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td colspan="7" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td>
+                                <td colspan="8" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -350,7 +379,8 @@
             selectedParam: 'All',
             freqScaleType: 'linear',
             markers: [],
-            bwHighlights: [],
+            bwHighlights: [],   // [{ fStart, fStop, color, param, type }]
+            bwMode: 'passband', // 'passband' | 'returnloss'
             isDark: false,
             colorPalette: ['#0ea5e9', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
         };
@@ -371,7 +401,7 @@
             bwTableBody: document.querySelector('#bwTable tbody')
         };
 
-        const PLOT_DIVS = ['plot-mag', 'plot-phase', 'plot-gd', 'plot-vswr', 'plot-z', 'plot-smith'];
+        const PLOT_DIVS = ['plot-mag', 'plot-phase', 'plot-gd', 'plot-vswr', 'plot-z', 'plot-smith', 'plot-3d-gd'];
         let isSyncing = false;
         let listenersAttached = false;
 
@@ -529,14 +559,26 @@
         }
 
         function getLayout(title, xTitle, yTitle, isDark) {
+            const axisColor = isDark ? '#cbd5e1' : '#475569';
             return {
                 title: { text: title, font: { color: isDark ? '#fff' : '#000', size: 14 } },
                 paper_bgcolor: 'transparent', plot_bgcolor: isDark ? '#1e293b' : '#fff',
-                margin: { t: 40, r: 20, b: 40, l: 60 },
-                xaxis: { title: xTitle, type: AppState.freqScaleType, gridcolor: isDark ? '#334155' : '#e2e8f0', color: isDark ? '#cbd5e1' : '#475569' },
-                yaxis: { title: yTitle, gridcolor: isDark ? '#334155' : '#e2e8f0', color: isDark ? '#cbd5e1' : '#475569' },
+                margin: { t: 40, r: 20, b: 50, l: 70 },
+                xaxis: {
+                    title: { text: xTitle, font: { color: axisColor } },
+                    type: AppState.freqScaleType,
+                    gridcolor: isDark ? '#334155' : '#e2e8f0',
+                    color: axisColor,
+                    tickfont: { color: axisColor }
+                },
+                yaxis: {
+                    title: { text: yTitle, font: { color: axisColor } },
+                    gridcolor: isDark ? '#334155' : '#e2e8f0',
+                    color: axisColor,
+                    tickfont: { color: axisColor }
+                },
                 showlegend: true, hovermode: 'closest',
-                legend: { orientation: 'h', y: -0.2, font: { color: isDark ? '#cbd5e1' : '#475569' } },
+                legend: { orientation: 'h', y: -0.25, font: { color: axisColor } },
                 shapes: []
             };
         }
@@ -601,9 +643,9 @@
 
             const layouts = {
                 mag: getLayout('Magnitude', xTitle, 'Magnitude (dB)', isDark),
-                phase: getLayout('Phase', xTitle, 'Phase (deg)', isDark),
-                gd: getLayout('Group Delay', xTitle, 'Time (ns)', isDark),
-                vswr: getLayout('VSWR', xTitle, 'Ratio', isDark),
+                phase: getLayout('Phase', xTitle, 'Phase (°)', isDark),
+                gd: getLayout('Group Delay', xTitle, 'Group Delay (ns)', isDark),
+                vswr: getLayout('VSWR', xTitle, 'VSWR (ratio)', isDark),
                 z: getLayout('Impedance (Mag)', xTitle, '|Z| (Ω)', isDark)
             };
 
@@ -611,9 +653,14 @@
                 const shapes = AppState.bwHighlights.map(bw => ({
                     type: 'rect', xref: 'x', yref: 'paper',
                     x0: bw.fStart / freqScale.div, x1: bw.fStop / freqScale.div,
-                    y0: 0, y1: 1, fillcolor: 'rgba(234, 179, 8, 0.2)', line: { width: 0 }
+                    y0: 0, y1: 1,
+                    fillcolor: bw.color || 'rgba(234,179,8,0.2)',
+                    line: { width: 1, color: bw.color ? bw.color.replace('0.25','0.7') : 'rgba(234,179,8,0.7)', dash: 'dot' }
                 }));
-                Object.values(layouts).forEach(l => l.shapes = shapes);
+                // Apply highlights to magnitude plot (primary view) and phase plot
+                layouts.mag.shapes  = shapes;
+                layouts.phase.shapes = shapes;
+                layouts.gd.shapes   = shapes;
             }
 
             Plotly.react('plot-mag', traces.mag, layouts.mag, { responsive: true });
@@ -630,6 +677,193 @@
                 showlegend: true, hovermode: 'closest', legend: { orientation: 'h', y: -0.1, font: { color: isDark ? '#cbd5e1' : '#475569' } }
             };
             Plotly.react('plot-smith', traces.smith, smithLayout, { responsive: true });
+            // ── Surface Plot: Phi (deg) × Theta (deg) → Group Delay (ns) ────────
+            // Matches reference: white walls, viridis colorscale, bold title,
+            // X = Phi (deg), Y = Theta (deg), Z = Group Delay (ns).
+            // Theta is mapped from the unwrapped phase (0–360 range).
+            // Phi is mapped from the frequency axis scaled to 0–360 range so the
+            // surface always fills a full angular sweep — just like antenna pattern
+            // data in the reference image.  Raw data is preserved (no smoothing)
+            // so spikes and peaks remain visible as in the reference.
+            const textColor  = isDark ? '#e2e8f0' : '#111827';
+            const wallColor  = isDark ? '#1e293b'  : '#ffffff';
+            const wallBorder = isDark ? '#334155'  : '#d1d5db';
+            const gridColor3 = isDark ? '#475569'  : '#9ca3af';
+            const titleColor = isDark ? '#f1f5f9'  : '#111827';
+            const surfTraces = [];
+
+            // Viridis colorscale — matches the reference image (blue→cyan→green→yellow)
+            const viridisColorscale = [
+                [0.000, '#440154'], [0.111, '#482878'], [0.222, '#3e4989'],
+                [0.333, '#31688e'], [0.444, '#26828e'], [0.556, '#1f9e89'],
+                [0.667, '#35b779'], [0.778, '#6ece58'], [0.889, '#b5de2b'],
+                [1.000, '#fde725']
+            ];
+
+            // Grid resolution — balance between detail and performance
+            const PHI_COLS   = 80;   // columns → Phi axis (freq mapped 0–360°)
+            const THETA_ROWS = 80;   // rows    → Theta axis (phase mapped 0–180°)
+            const MAX_PTS    = 5000; // max raw points to process
+
+            AppState.datasets.filter(d => d.visible).forEach(ds => {
+                const keys3d = paramsToRender
+                    ? [paramsToRender]
+                    : Object.keys(ds.data).filter(k => k.startsWith('S'));
+
+                keys3d.forEach(param => {
+                    if (!ds.data[param]) return;
+                    const comp = computeDerivedData(ds, param);
+                    const n    = comp.f.length;
+                    if (n < 2) return;
+
+                    // ── 1. Downsample raw points if very dense ──
+                    const step = Math.max(1, Math.floor(n / MAX_PTS));
+                    const pts  = [];   // { phi, theta, gd }
+                    for (let i = 0; i < n; i += step) {
+                        // Map frequency linearly to Phi 0–360°
+                        const phi   = ((i / (n - 1)) * 360);
+                        // Map wrapped phase (−180…+180) to Theta 0–180°
+                        const theta = (comp.phaseDeg[i] + 180) / 2;   // 0–180
+                        pts.push({ phi, theta, gd: comp.gd[i] });
+                    }
+
+                    // ── 2. Build uniform Phi × Theta grid axes ──
+                    const phiAxis   = Array.from({ length: PHI_COLS },   (_, c) => (c / (PHI_COLS   - 1)) * 360);
+                    const thetaAxis = Array.from({ length: THETA_ROWS }, (_, r) => (r / (THETA_ROWS - 1)) * 180);
+
+                    // ── 3. Scatter into nearest grid cell ──
+                    const zGrid = Array.from({ length: THETA_ROWS }, () => new Array(PHI_COLS).fill(null));
+                    const wGrid = Array.from({ length: THETA_ROWS }, () => new Array(PHI_COLS).fill(0));
+
+                    const phiStep   = 360 / (PHI_COLS   - 1);
+                    const thetaStep = 180 / (THETA_ROWS - 1);
+
+                    pts.forEach(({ phi, theta, gd }) => {
+                        const ci = Math.min(PHI_COLS   - 1, Math.round(phi   / phiStep));
+                        const ri = Math.min(THETA_ROWS - 1, Math.round(theta / thetaStep));
+                        if (zGrid[ri][ci] === null) {
+                            zGrid[ri][ci] = gd;
+                            wGrid[ri][ci] = 1;
+                        } else {
+                            // Average multiple hits into same cell
+                            wGrid[ri][ci]++;
+                            zGrid[ri][ci] += (gd - zGrid[ri][ci]) / wGrid[ri][ci];
+                        }
+                    });
+
+                    // ── 4. Fill empty cells: nearest-neighbour per row then col ──
+                    for (let r = 0; r < THETA_ROWS; r++) {
+                        let last = null;
+                        for (let c = 0; c < PHI_COLS; c++) {
+                            if (zGrid[r][c] !== null) last = zGrid[r][c];
+                            else if (last !== null)   zGrid[r][c] = last;
+                        }
+                        last = null;
+                        for (let c = PHI_COLS - 1; c >= 0; c--) {
+                            if (zGrid[r][c] !== null) last = zGrid[r][c];
+                            else if (last !== null)   zGrid[r][c] = last;
+                        }
+                    }
+                    // Column-wise fill for any remaining nulls
+                    for (let c = 0; c < PHI_COLS; c++) {
+                        let last = null;
+                        for (let r = 0; r < THETA_ROWS; r++) {
+                            if (zGrid[r][c] !== null) last = zGrid[r][c];
+                            else if (last !== null)   zGrid[r][c] = last;
+                        }
+                        last = null;
+                        for (let r = THETA_ROWS - 1; r >= 0; r--) {
+                            if (zGrid[r][c] !== null) last = zGrid[r][c];
+                            else if (last !== null)   zGrid[r][c] = last;
+                        }
+                        for (let r = 0; r < THETA_ROWS; r++) {
+                            if (zGrid[r][c] === null) zGrid[r][c] = 0;
+                        }
+                    }
+
+                    // ── 5. Build surface trace (no smoothing — preserve spikes) ──
+                    surfTraces.push({
+                        type: 'surface',
+                        name: `${ds.filename} – ${param}`,
+                        x: phiAxis,        // Phi   (deg) — front floor axis
+                        y: thetaAxis,      // Theta (deg) — side  floor axis
+                        z: zGrid,          // Group Delay (ns) — vertical axis
+                        colorscale: viridisColorscale,
+                        showscale: true,
+                        opacity: 1.0,
+                        colorbar: {
+                            title: { text: 'GD (ns)', font: { color: textColor, size: 11 }, side: 'right' },
+                            tickfont: { color: textColor, size: 10 },
+                            thickness: 18,
+                            len: 0.75,
+                            x: 1.02
+                        },
+                        contours: {
+                            x: { highlight: false },
+                            y: { highlight: false },
+                            z: { highlight: false }
+                        },
+                        hovertemplate:
+                            `<b>${ds.filename} – ${param}</b><br>` +
+                            `Phi: %{x:.1f}°<br>` +
+                            `Theta: %{y:.1f}°<br>` +
+                            `GD: %{z:.3f} ns<extra></extra>`,
+                        lighting: { ambient: 0.85, diffuse: 0.7, roughness: 0.5, specular: 0.05 },
+                        lightposition: { x: 200, y: 200, z: 500 }
+                    });
+                });
+            });
+
+            const surfLayout = {
+                title: {
+                    text: 'Group Delay – Vertical',
+                    font: { color: titleColor, size: 14, weight: 'bold' },
+                    x: 0.5, xanchor: 'center'
+                },
+                paper_bgcolor: 'transparent',
+                margin: { t: 52, r: 80, b: 10, l: 10 },
+                scene: {
+                    bgcolor: wallColor,
+                    aspectmode: 'manual',
+                    aspectratio: { x: 1.4, y: 1.0, z: 0.7 },
+                    xaxis: {
+                        title: { text: 'Phi (deg)',               font: { color: textColor, size: 11 } },
+                        color: textColor, tickfont: { color: textColor, size: 10 },
+                        gridcolor: gridColor3, showbackground: true,
+                        backgroundcolor: wallColor, zerolinecolor: wallBorder,
+                        linecolor: wallBorder, showline: true, mirror: true
+                    },
+                    yaxis: {
+                        title: { text: 'Theta (deg)',             font: { color: textColor, size: 11 } },
+                        color: textColor, tickfont: { color: textColor, size: 10 },
+                        gridcolor: gridColor3, showbackground: true,
+                        backgroundcolor: wallColor, zerolinecolor: wallBorder,
+                        linecolor: wallBorder, showline: true, mirror: true
+                    },
+                    zaxis: {
+                        title: { text: 'Group Delay - Vertical (ns)', font: { color: textColor, size: 11 } },
+                        color: textColor, tickfont: { color: textColor, size: 10 },
+                        gridcolor: gridColor3, showbackground: true,
+                        backgroundcolor: wallColor, zerolinecolor: wallBorder,
+                        linecolor: wallBorder, showline: true, mirror: true
+                    },
+                    // Camera matches reference: front-right elevated view
+                    camera: {
+                        eye:    { x: 1.8, y: -1.6, z: 0.8 },
+                        center: { x: 0,   y: 0,    z: -0.1 },
+                        up:     { x: 0,   y: 0,    z: 1 }
+                    }
+                },
+                showlegend: false
+            };
+
+            Plotly.react(
+                'plot-3d-gd',
+                surfTraces.length ? surfTraces : [{ type: 'surface', x: [0], y: [0], z: [[0]] }],
+                surfLayout,
+                { responsive: true }
+            );
+
 
             attachChartListenersOnce();
             renderMarkerTable();
@@ -729,60 +963,107 @@
         }
 
         function calculateBandwidth() {
-            // FIX: Take the absolute value to natively handle both positive and negative inputs gracefully
             let rawThreshold = parseFloat(DOM.bwThreshold.value);
-            if (isNaN(rawThreshold) || rawThreshold === 0) return alert("Invalid threshold. Please enter a non-zero value.");
-
-            const threshold = Math.abs(rawThreshold); // e.g. -3 becomes 3, subtracting 3dB from the peak
+            if (isNaN(rawThreshold) || rawThreshold === 0)
+                return alert('Invalid threshold. Please enter a non-zero value.');
+            const threshold = Math.abs(rawThreshold);
+            const mode      = AppState.bwMode;   // 'passband' | 'returnloss'
 
             DOM.bwTableBody.innerHTML = '';
             AppState.bwHighlights = [];
             let hasResults = false;
             const fScale = getDynamicFreqScale();
-            const paramsToProcess = AppState.selectedParam === 'All' ? ['S11', 'S21', 'S12', 'S22'] : [AppState.selectedParam];
 
-            AppState.datasets.filter(d => d.visible).forEach(ds => {
+            // Per-type highlight colours
+            const passbandColors = ['rgba(16,185,129,0.25)','rgba(6,182,212,0.25)','rgba(139,92,246,0.25)','rgba(236,72,153,0.25)'];
+            const rlColors       = ['rgba(239,68,68,0.25)', 'rgba(249,115,22,0.25)','rgba(234,179,8,0.25)', 'rgba(168,85,247,0.25)'];
+            let pbIdx = 0, rlIdx = 0;
+
+            // Discover all S-params from visible datasets
+            const visDs = AppState.datasets.filter(d => d.visible);
+            let paramsToProcess;
+            if (AppState.selectedParam !== 'All') {
+                paramsToProcess = [AppState.selectedParam];
+            } else {
+                const allP = new Set();
+                visDs.forEach(ds => Object.keys(ds.data).forEach(k => { if (k.startsWith('S')) allP.add(k); }));
+                paramsToProcess = Array.from(allP).sort();
+            }
+
+            // S11, S22, S33 … = diagonal = reflection
+            const isReflection = p => { const m = p.match(/^S(\d+)(\d+)$/i); return m && m[1] === m[2]; };
+
+            visDs.forEach(ds => {
                 paramsToProcess.forEach(param => {
                     if (!ds.data[param]) return;
-                    const comp = computeDerivedData(ds, param);
+                    const refl = isReflection(param);
+                    if (mode === 'returnloss' && !refl) return;
+                    if (mode === 'passband'   &&  refl) return;
 
-                    let maxMag = -Infinity, maxIdx = 0;
-                    comp.magDb.forEach((val, i) => { if (val > maxMag) { maxMag = val; maxIdx = i; } });
-                    const targetVal = maxMag - threshold;
+                    const comp  = computeDerivedData(ds, param);
+                    const magDb = comp.magDb;
+                    const n     = magDb.length;
+                    if (n < 2) return;
 
-                    let startIdx = maxIdx;
-                    while (startIdx > 0 && comp.magDb[startIdx - 1] >= targetVal) {
-                        startIdx--;
+                    let pivotIdx = 0, pivotVal, targetVal, rangeCheck;
+
+                    if (mode === 'passband') {
+                        // Find PEAK — region where curve stays within threshold of peak
+                        let maxVal = -Infinity;
+                        for (let i = 0; i < n; i++) { if (magDb[i] > maxVal) { maxVal = magDb[i]; pivotIdx = i; } }
+                        pivotVal  = maxVal;
+                        targetVal = pivotVal - threshold;
+                        rangeCheck = v => v >= targetVal;
+                    } else {
+                        // Find NOTCH — region where return loss stays below (notch + threshold)
+                        let minVal = Infinity;
+                        for (let i = 0; i < n; i++) { if (magDb[i] < minVal) { minVal = magDb[i]; pivotIdx = i; } }
+                        pivotVal  = minVal;
+                        targetVal = pivotVal + threshold;
+                        rangeCheck = v => v <= targetVal;
                     }
 
-                    let endIdx = maxIdx;
-                    while (endIdx < comp.magDb.length - 1 && comp.magDb[endIdx + 1] >= targetVal) {
-                        endIdx++;
-                    }
+                    let startIdx = pivotIdx;
+                    while (startIdx > 0 && rangeCheck(magDb[startIdx - 1])) startIdx--;
+                    let endIdx = pivotIdx;
+                    while (endIdx < n - 1 && rangeCheck(magDb[endIdx + 1])) endIdx++;
+                    if (startIdx === endIdx) return;
 
-                    if (startIdx !== endIdx) {
-                        hasResults = true;
-                        const fStart = comp.f[startIdx];
-                        const fStop = comp.f[endIdx];
-                        const bw = fStop - fStart;
-                        AppState.bwHighlights.push({ fStart, fStop });
+                    hasResults = true;
+                    const fStart = comp.f[startIdx];
+                    const fStop  = comp.f[endIdx];
+                    const bw     = fStop - fStart;
+                    const color  = mode === 'passband'
+                        ? passbandColors[pbIdx++ % passbandColors.length]
+                        : rlColors[rlIdx++ % rlColors.length];
 
-                        const tr = document.createElement('tr');
-                        tr.innerHTML = `
-                            <td>${Utils.escapeHTML(ds.filename)}</td>
-                            <td>${Utils.escapeHTML(param)}</td>
-                            <td>${(comp.f[maxIdx] / fScale.div).toFixed(4)} ${fScale.unit} (${maxMag.toFixed(2)} dB)</td>
-                            <td>${(fStart / fScale.div).toFixed(4)} ${fScale.unit}</td>
-                            <td>${(fStop / fScale.div).toFixed(4)} ${fScale.unit}</td>
-                            <td>- ${threshold} dB</td>
-                            <td class="font-bold text-brand-600 dark:text-brand-400">${(bw / fScale.div).toFixed(4)} ${fScale.unit}</td>
-                        `;
-                        DOM.bwTableBody.appendChild(tr);
-                    }
+                    AppState.bwHighlights.push({ fStart, fStop, color, param, type: mode === 'passband' ? 'BW/Gain' : 'Return Loss' });
+
+                    const typeLabel  = mode === 'passband' ? '&#x1F4E1; BW / Gain' : '&#x1F501; Return Loss';
+                    const pivotLabel = mode === 'passband'
+                        ? `Peak: ${(comp.f[pivotIdx] / fScale.div).toFixed(4)} ${fScale.unit} (${pivotVal.toFixed(2)} dB)`
+                        : `Notch: ${(comp.f[pivotIdx] / fScale.div).toFixed(4)} ${fScale.unit} (${pivotVal.toFixed(2)} dB)`;
+                    const threshLabel = mode === 'passband' ? `-${threshold} dB from peak` : `+${threshold} dB from notch`;
+
+                    const tr = document.createElement('tr');
+                    tr.innerHTML =
+                        `<td>${Utils.escapeHTML(ds.filename)}</td>` +
+                        `<td class="font-semibold">${Utils.escapeHTML(param)}</td>` +
+                        `<td><span class="inline-block px-2 py-0.5 rounded text-xs font-medium ${
+                            mode === 'passband'
+                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                        }">${typeLabel}</span></td>` +
+                        `<td class="text-xs">${pivotLabel}</td>` +
+                        `<td>${(fStart / fScale.div).toFixed(4)} ${fScale.unit}</td>` +
+                        `<td>${(fStop  / fScale.div).toFixed(4)} ${fScale.unit}</td>` +
+                        `<td class="text-xs text-gray-500">${threshLabel}</td>` +
+                        `<td class="font-bold text-brand-600 dark:text-brand-400">${(bw / fScale.div).toFixed(4)} ${fScale.unit}</td>`;
+                    DOM.bwTableBody.appendChild(tr);
                 });
             });
 
-            if (!hasResults) DOM.bwTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500">No bandwidth found within threshold.</td></tr>`;
+            if (!hasResults) DOM.bwTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500">No bandwidth found within threshold.</td></tr>';
             if (AppState.bwHighlights.length > 0) {
                 DOM.clearBwBtn.classList.remove('hidden');
                 DOM.clearBwBtn.disabled = false;
@@ -792,7 +1073,7 @@
 
         DOM.clearBwBtn.addEventListener('click', () => {
             AppState.bwHighlights = [];
-            DOM.bwTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td></tr>`;
+            DOM.bwTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td></tr>`;
             DOM.clearBwBtn.classList.add('hidden');
             renderPlots();
         });
@@ -874,6 +1155,44 @@
         });
 
         DOM.calcBwBtn.addEventListener('click', calculateBandwidth);
+
+        // ── Bandwidth mode toggle buttons ──────────────────────────────────────
+        document.querySelectorAll('.bw-mode-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const newMode = btn.dataset.mode;
+                if (AppState.bwMode === newMode) return;
+                AppState.bwMode = newMode;
+
+                // Update button active styles
+                document.querySelectorAll('.bw-mode-btn').forEach(b => {
+                    const active = b.dataset.mode === newMode;
+                    b.classList.toggle('bg-brand-500', active);
+                    b.classList.toggle('text-white',   active);
+                    b.classList.toggle('bg-white',     !active && !document.documentElement.classList.contains('dark'));
+                    b.classList.toggle('dark:bg-gray-600', !active);
+                    b.classList.toggle('text-gray-700', !active);
+                });
+
+                // Update threshold label and hint text
+                const hint  = document.getElementById('bwModeHint');
+                const label = document.getElementById('bwThresholdLabel');
+                if (newMode === 'passband') {
+                    label.textContent = 'Threshold (dB from peak)';
+                    hint.innerHTML = 'Measures <strong>S21/S12/Sij (i\u2260j)</strong> passband: region where magnitude stays within <em>threshold</em> dB of the peak.';
+                    document.getElementById('bwThreshold').value = '3';
+                } else {
+                    label.textContent = 'Threshold (dB from notch)';
+                    hint.innerHTML = 'Measures <strong>S11/S22/Snn</strong> return loss: region where reflection stays within <em>threshold</em> dB of the deepest notch.';
+                    document.getElementById('bwThreshold').value = '3';
+                }
+
+                // Clear stale highlights when mode changes
+                AppState.bwHighlights = [];
+                DOM.bwTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500">Mode changed \u2014 click Calculate &amp; Highlight.</td></tr>';
+                DOM.clearBwBtn.classList.add('hidden');
+                if (AppState.datasets.length > 0) renderPlots();
+            });
+        });
 
         function toggleTheme() {
             AppState.isDark = !AppState.isDark;
