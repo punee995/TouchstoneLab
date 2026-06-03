@@ -1,1262 +1,1421 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Touchstone Lab | RF & Microwave S-Parameter Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.plot.ly/plotly-3.5.1.min.js" charset="utf-8"></script>
-
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        brand: { 50: '#f0f9ff', 500: '#0ea5e9', 600: '#0284c7', 900: '#0c4a6e' }
-                    }
-                }
-            }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Touchstone Lab // RF · S-Parameter Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.plot.ly/plotly-3.5.1.min.js" charset="utf-8"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          cyber: {
+            50:  '#e6fffd', 100: '#b3fff9', 200: '#66fff2',
+            300: '#00ffe8', 400: '#00d4c8', 500: '#00b5ab',
+            600: '#008f86', 700: '#006b64', 800: '#004844',
+            900: '#002624'
+          },
+          ink: {
+            50: '#f0f4f8', 100: '#d9e2ec',
+            700: '#1a2332', 800: '#111827',
+            850: '#0e1520', 900: '#090e17', 950: '#050a10'
+          }
+        },
+        fontFamily: {
+          mono: ['"JetBrains Mono"', 'Courier New', 'monospace'],
+          sans: ['Inter', 'system-ui', 'sans-serif'],
         }
-    </script>
-    <style>
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        }
+      }
+    }
+  }
+</script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
 
-        .chart-container {
-            height: 400px;
-            width: 100%;
-            position: relative;
-        }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #090e17;
+    color: #c8d6e8;
+  }
 
-        .fullscreen-btn {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 50;
-        }
+  /* ── Scrollbars ─────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #090e17; }
+  ::-webkit-scrollbar-thumb { background: #1e3a4a; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #00d4c8; }
 
-        .fullscreen-active {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            right: 0 !important;
-            bottom: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            background: white;
-            z-index: 9999 !important;
-            padding: 20px;
-            margin: 0 !important;
-            border-radius: 0 !important;
-            box-sizing: border-box;
-        }
+  /* ── Section heading style: // TITLE ────────── */
+  .sec-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #00d4c8;
+  }
+  .sec-title::before { content: '// '; opacity: 0.7; }
 
-        .dark .fullscreen-active {
-            background: #1e293b;
-        }
+  /* ── Teal divider line ───────────────────────── */
+  .teal-rule {
+    border: none;
+    border-top: 1px solid rgba(0,212,200,0.2);
+    margin: 0;
+  }
 
-        .fullscreen-active .chart-container {
-            height: calc(100vh - 40px) !important;
-        }
+  /* ── Chart containers ────────────────────────── */
+  .chart-container {
+    height: 340px;
+    width: 100%;
+    position: relative;
+  }
 
-        table {
-            border-collapse: collapse;
-            width: 100%;
-        }
+  /* ── Chart card ──────────────────────────────── */
+  .chart-card {
+    background: #0e1520;
+    border: 1px solid rgba(0,212,200,0.12);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
+  }
+  .chart-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(0,212,200,0.5), transparent);
+  }
 
-        th,
-        td {
-            padding: 8px;
-            border: 1px solid #e2e8f0;
-            text-align: left;
-        }
+  /* ── Chart label bar ─────────────────────────── */
+  .chart-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #00d4c8;
+    padding: 8px 12px 4px;
+    border-bottom: 1px solid rgba(0,212,200,0.08);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .chart-label::before { content: '//'; opacity: 0.5; font-size: 0.6rem; }
 
-        .dark th,
-        .dark td {
-            border-color: #334155;
-            color: #cbd5e1;
-        }
+  /* ── Fullscreen button ───────────────────────── */
+  .fullscreen-btn {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    z-index: 50;
+    font-size: 14px;
+    color: rgba(0,212,200,0.4);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    transition: color 0.15s;
+  }
+  .fullscreen-btn:hover { color: #00d4c8; }
 
-        .dark th {
-            background-color: #0f172a;
-        }
+  /* ── Fullscreen overlay ──────────────────────── */
+  .fullscreen-active {
+    position: fixed !important;
+    top: 0 !important; left: 0 !important;
+    right: 0 !important; bottom: 0 !important;
+    width: 100vw !important; height: 100vh !important;
+    background: #090e17 !important;
+    z-index: 9999 !important;
+    padding: 16px; margin: 0 !important;
+    border-radius: 0 !important;
+    box-sizing: border-box;
+  }
+  .fullscreen-active .chart-container {
+    height: calc(100vh - 60px) !important;
+  }
 
-        th {
-            background-color: #f8fafc;
-            font-weight: 600;
-        }
+  /* ── Sidebar controls ────────────────────────── */
+  .ctrl-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6b8fa8;
+    display: block;
+    margin-bottom: 4px;
+  }
 
-        /* Disabled states for controls */
-        select:disabled,
-        input:disabled,
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+  .ctrl-select, .ctrl-input {
+    width: 100%;
+    background: #0e1520;
+    border: 1px solid rgba(0,212,200,0.18);
+    border-radius: 3px;
+    color: #c8d6e8;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    padding: 6px 8px;
+    outline: none;
+    transition: border-color 0.15s;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .ctrl-select:focus, .ctrl-input:focus {
+    border-color: rgba(0,212,200,0.6);
+    box-shadow: 0 0 0 2px rgba(0,212,200,0.08);
+  }
+  .ctrl-select:disabled, .ctrl-input:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+  .ctrl-select option { background: #0e1520; }
 
-        /* --- Print Styling --- */
-        @media print {
-            @page {
-                size: A4 portrait;
-                margin: 1.5cm;
-            }
+  /* ── File drop zone ──────────────────────────── */
+  .drop-zone {
+    border: 1px dashed rgba(0,212,200,0.25);
+    border-radius: 4px;
+    padding: 20px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: rgba(0,212,200,0.55);
+    background: rgba(0,212,200,0.06);
+  }
+  .drop-zone.drag-over {
+    border-color: #00d4c8;
+    background: rgba(0,212,200,0.1);
+    box-shadow: 0 0 12px rgba(0,212,200,0.15);
+  }
 
-            body {
-                background: white !important;
-                color: black !important;
-            }
+  /* ── Buttons ─────────────────────────────────── */
+  .btn-cyber {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 14px;
+    border-radius: 3px;
+    border: 1px solid #00d4c8;
+    background: rgba(0,212,200,0.08);
+    color: #00d4c8;
+    cursor: pointer;
+    transition: background 0.15s, box-shadow 0.15s;
+    white-space: nowrap;
+  }
+  .btn-cyber:hover:not(:disabled) {
+    background: rgba(0,212,200,0.18);
+    box-shadow: 0 0 12px rgba(0,212,200,0.2);
+  }
+  .btn-cyber:disabled { opacity: 0.3; cursor: not-allowed; }
 
-            /* Hide UI controls not needed in physical print */
-            header,
-            aside,
-            .fullscreen-btn,
-            #resetZoomBtn,
-            #printBtn {
-                display: none !important;
-            }
+  .btn-cyber-solid {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 10px 18px;
+    border-radius: 3px;
+    border: none;
+    background: linear-gradient(135deg, #00d4c8, #00b5ab);
+    color: #090e17;
+    cursor: pointer;
+    transition: opacity 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+  .btn-cyber-solid:hover:not(:disabled) {
+    opacity: 0.9;
+    box-shadow: 0 0 20px rgba(0,212,200,0.35);
+  }
+  .btn-cyber-solid:disabled { opacity: 0.3; cursor: not-allowed; }
 
-            /* Expand main content to full page */
-            #mainContent {
-                padding: 0 !important;
-                overflow: visible !important;
-                height: auto !important;
-                width: 100% !important;
-            }
+  .btn-ghost {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    padding: 6px 12px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: transparent;
+    color: #6b8fa8;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-ghost:hover { border-color: rgba(0,212,200,0.35); color: #00d4c8; }
 
-            /* Stack charts sequentially instead of side-by-side to fit A4 width perfectly */
-            .grid {
-                display: block !important;
-            }
+  /* ── Status badges ───────────────────────────── */
+  .badge-pass {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 2px;
+    background: rgba(16,185,129,0.15);
+    color: #10b981;
+    border: 1px solid rgba(16,185,129,0.3);
+  }
+  .badge-fail {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 2px;
+    background: rgba(239,68,68,0.15);
+    color: #ef4444;
+    border: 1px solid rgba(239,68,68,0.3);
+  }
+  .badge-warn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 2px;
+    background: rgba(245,158,11,0.15);
+    color: #f59e0b;
+    border: 1px solid rgba(245,158,11,0.3);
+  }
 
-            /* Prevent charts and tables from being cut in half across pages */
-            .rounded-xl {
-                break-inside: avoid !important;
-                page-break-inside: avoid !important;
-                box-shadow: none !important;
-                border: 1px solid #e2e8f0 !important;
-                margin-bottom: 2rem !important;
-                padding: 1rem !important;
-            }
+  /* ── Param toggle pills ──────────────────────── */
+  .param-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; font-weight: 600;
+    letter-spacing: 0.06em;
+    padding: 3px 8px; border-radius: 2px;
+    border: 1px solid rgba(0,212,200,0.25);
+    background: transparent;
+    color: #6b8fa8;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .param-pill.active {
+    background: rgba(0,212,200,0.15);
+    border-color: #00d4c8;
+    color: #00d4c8;
+  }
 
-            /* Adjust chart height for print to fit 2 per page nicely */
-            .chart-container {
-                height: 350px !important;
-            }
+  /* ── Tables ──────────────────────────────────── */
+  table { border-collapse: collapse; width: 100%; }
+  th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: #00d4c8; padding: 8px 10px;
+    border-bottom: 1px solid rgba(0,212,200,0.2);
+    background: rgba(0,212,200,0.04);
+    text-align: left;
+  }
+  td {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem; color: #94a9be;
+    padding: 7px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  tr:hover td { background: rgba(0,212,200,0.03); }
 
-            /* Ensure colors print accurately */
-            * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-            }
-        }
-    </style>
+  /* ── Stat chip (inline metric display) ──────── */
+  .stat-chip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    background: rgba(0,212,200,0.08);
+    border: 1px solid rgba(0,212,200,0.2);
+    border-radius: 3px;
+    padding: 3px 10px;
+    color: #c8d6e8;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .stat-chip .val { color: #00d4c8; font-weight: 600; }
+
+  /* ── Sidebar section separator ───────────────── */
+  .sidebar-section {
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(0,212,200,0.08);
+  }
+  .sidebar-section:last-child { border-bottom: none; }
+
+  /* ── Upload file chip ────────────────────────── */
+  .file-chip {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 6px;
+    background: rgba(0,212,200,0.06);
+    border: 1px solid rgba(0,212,200,0.18);
+    border-radius: 3px;
+    padding: 5px 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: #00d4c8;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+  .chip-name {
+    color: #94a9be;
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .chip-pts {
+    color: #3a5570;
+    font-size: 0.58rem;
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin-left: auto;
+  }
+
+  /* ── Verdict block ───────────────────────────── */
+  .verdict-block {
+    background: rgba(0,212,200,0.04);
+    border: 1px solid rgba(0,212,200,0.12);
+    border-radius: 4px;
+    padding: 12px;
+  }
+
+  /* ══════════════════════════════════════════════════════
+     LIGHT MODE OVERRIDES  (when html does NOT have .dark)
+  ══════════════════════════════════════════════════════ */
+  html:not(.dark) body {
+    background: #f0f4f8;
+    color: #1a2332;
+  }
+  html:not(.dark) ::-webkit-scrollbar-track  { background: #e8edf2; }
+  html:not(.dark) ::-webkit-scrollbar-thumb  { background: #a8bdd0; }
+
+  /* Header */
+  html:not(.dark) #appHeader {
+    background: #ffffff !important;
+    border-bottom-color: rgba(0,180,170,0.2) !important;
+  }
+  html:not(.dark) #appHeader span { color: #1a2332 !important; }
+
+  /* Sidebar */
+  html:not(.dark) #appSidebar {
+    background: #ffffff !important;
+    border-right-color: rgba(0,180,170,0.15) !important;
+  }
+  html:not(.dark) .sidebar-section {
+    border-bottom-color: rgba(0,180,170,0.12) !important;
+  }
+
+  /* Main content */
+  html:not(.dark) #mainContent { background: #f0f4f8 !important; }
+
+  /* Chart cards */
+  html:not(.dark) .chart-card {
+    background: #ffffff !important;
+    border-color: rgba(0,180,170,0.18) !important;
+  }
+  html:not(.dark) .chart-card::before {
+    background: linear-gradient(90deg, transparent, rgba(0,180,170,0.3), transparent) !important;
+  }
+  html:not(.dark) .chart-label {
+    color: #007a75 !important;
+    border-bottom-color: rgba(0,180,170,0.1) !important;
+  }
+  html:not(.dark) .fullscreen-active {
+    background: #f0f4f8 !important;
+  }
+
+  /* Drop zone */
+  html:not(.dark) .drop-zone {
+    border-color: rgba(0,180,170,0.3) !important;
+  }
+  html:not(.dark) .drop-zone:hover {
+    background: rgba(0,180,170,0.04) !important;
+    border-color: rgba(0,180,170,0.55) !important;
+  }
+
+  /* Controls */
+  html:not(.dark) .ctrl-select,
+  html:not(.dark) .ctrl-input {
+    background: #f8fafc !important;
+    border-color: rgba(0,180,170,0.25) !important;
+    color: #1a2332 !important;
+  }
+  html:not(.dark) .ctrl-select option { background: #ffffff !important; }
+  html:not(.dark) .ctrl-label { color: #4a6a7a !important; }
+
+  /* File chips */
+  html:not(.dark) .file-chip {
+    background: rgba(0,180,170,0.06) !important;
+    border-color: rgba(0,180,170,0.2) !important;
+  }
+  html:not(.dark) .chip-name { color: #2a4a5a !important; }
+  html:not(.dark) .chip-pts  { color: #7a9aaa !important; }
+
+  /* Buttons */
+  html:not(.dark) .btn-ghost {
+    border-color: rgba(0,0,0,0.12) !important;
+    color: #4a6a7a !important;
+  }
+  html:not(.dark) .btn-ghost:hover {
+    border-color: rgba(0,180,170,0.4) !important;
+    color: #007a75 !important;
+  }
+  html:not(.dark) .btn-cyber-solid {
+    background: linear-gradient(135deg, #007a75, #009990) !important;
+  }
+
+  /* Tables */
+  html:not(.dark) th {
+    background: rgba(0,180,170,0.06) !important;
+    color: #007a75 !important;
+    border-bottom-color: rgba(0,180,170,0.2) !important;
+  }
+  html:not(.dark) td {
+    color: #2a4a5a !important;
+    border-bottom-color: rgba(0,0,0,0.05) !important;
+  }
+  html:not(.dark) tr:hover td { background: rgba(0,180,170,0.03) !important; }
+
+  /* Stat chips */
+  html:not(.dark) .stat-chip {
+    background: rgba(0,180,170,0.08) !important;
+    border-color: rgba(0,180,170,0.2) !important;
+    color: #1a2332 !important;
+  }
+  html:not(.dark) .stat-chip .val { color: #007a75 !important; }
+
+  /* BW hint text */
+  html:not(.dark) #bwThresholdHint { color: #7a9aaa !important; }
+</style>
 </head>
 
-<body
-    class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100 transition-colors duration-200 min-h-screen flex flex-col">
+<body>
+<!-- ════════════════════ HEADER ════════════════════ -->
+<header id="appHeader" style="background:#0e1520;border-bottom:1px solid rgba(0,212,200,0.15);padding:10px 20px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;transition:background 0.2s,border-color 0.2s;">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <!-- Lightning bolt icon in cyan -->
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#00d4c8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+    </svg>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:0.8rem;font-weight:700;letter-spacing:0.12em;color:#e2e8f0;">TOUCHSTONE<span style="color:#00d4c8;">LAB</span></span>
+    <span style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#3a5570;letter-spacing:0.08em;">// RF &amp; MICROWAVE S-PARAMETER DASHBOARD</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <button id="resetZoomBtn" class="btn-ghost">Reset Zoom</button>
+    <button id="themeToggle" class="btn-ghost" aria-label="Toggle Theme" style="font-size:0.75rem;padding:5px 8px;">
+      <svg id="moonIcon" width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/></svg>
+      <svg id="sunIcon" class="hidden" width="14" height="14" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 1.32a1 1 0 011.415 0l.708.708a1 1 0 01-1.414 1.415l-.708-.708a1 1 0 010-1.415zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zm-1.32 4.22a1 1 0 010 1.415l-.708.708a1 1 0 01-1.414-1.415l.708-.708a1 1 0 011.415 0zM10 16a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-4.22-1.32a1 1 0 01-1.415 0l-.708-.708a1 1 0 011.414-1.415l.708.708a1 1 0 010 1.415zM4 10a1 1 0 01-1 1H2a1 1 0 110-2h1a1 1 0 011 1zm1.32-4.22a1 1 0 010-1.415l.708-.708a1 1 0 011.414 1.415l-.708.708a1 1 0 01-1.415 0zM10 5a5 5 0 100 10 5 5 0 000-10z" clip-rule="evenodd"/></svg>
+    </button>
+  </div>
+</header>
 
-    <header
-        class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex justify-between items-center z-10 sticky top-0">
-        <div class="flex items-center gap-3">
-            <svg class="w-8 h-8 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                xmlns="http://www.w3.org/2000/svg">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z">
-                </path>
-            </svg>
-            <h1 class="text-xl font-bold tracking-tight">Touchstone Lab</h1>
-        </div>
-        <button id="themeToggle" aria-label="Toggle Dark Mode"
-            class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition">
-            <svg id="moonIcon" class="w-5 h-5 hidden" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"></path>
-            </svg>
-            <svg id="sunIcon" class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd"
-                    d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4.22 1.32a1 1 0 011.415 0l.708.708a1 1 0 01-1.414 1.415l-.708-.708a1 1 0 010-1.415zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zm-1.32 4.22a1 1 0 010 1.415l-.708.708a1 1 0 01-1.414-1.415l.708-.708a1 1 0 011.415 0zM10 16a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm-4.22-1.32a1 1 0 01-1.415 0l-.708-.708a1 1 0 011.414-1.415l.708.708a1 1 0 010 1.415zM4 10a1 1 0 01-1 1H2a1 1 0 110-2h1a1 1 0 011 1zm1.32-4.22a1 1 0 010-1.415l.708-.708a1 1 0 011.414 1.415l-.708.708a1 1 0 01-1.415 0zM10 5a5 5 0 100 10 5 5 0 000-10z"
-                    clip-rule="evenodd"></path>
-            </svg>
-        </button>
-    </header>
+<!-- ════════════════════ LAYOUT ════════════════════ -->
+<div style="display:flex;height:calc(100vh - 45px);overflow:hidden;">
 
-    <div class="flex flex-1 overflow-hidden">
-        <aside
-            class="w-80 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 p-6 overflow-y-auto flex-shrink-0">
+<!-- ══════════ SIDEBAR ══════════ -->
+<aside id="appSidebar" style="width:260px;background:#0c1219;border-right:1px solid rgba(0,212,200,0.1);overflow-y:auto;flex-shrink:0;padding:0 0 20px;transition:background 0.2s,border-color 0.2s;">
 
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Upload SnP Files</label>
-                <input type="file" id="fileInput" multiple accept=".s1p,.s2p,.s3p,.s4p,.snp"
-                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-900 hover:file:bg-brand-100 cursor-pointer border border-gray-300 dark:border-gray-600 rounded-md">
-            </div>
+  <!-- S-Parameter File -->
+  <div class="sidebar-section" style="padding:14px 16px;">
+    <div class="sec-title" style="margin-bottom:10px;">S-Parameter File</div>
+    <input type="file" id="fileInput" multiple accept=".s1p,.s2p,.s3p,.s4p,.snp" style="display:none;">
+    <div id="dropZone" class="drop-zone" role="button" tabindex="0" aria-label="Upload S-parameter file">
+      <svg width="22" height="22" fill="none" stroke="rgba(0,212,200,0.5)" stroke-width="1.5" viewBox="0 0 24 24" style="margin:0 auto 6px;display:block;">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+      </svg>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#4a7a99;">Drop <span style="color:#00d4c8;">.s2p</span> here</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#3a5570;margin-top:2px;">or click to browse</div>
+    </div>
+    <div id="datasetList" style="margin-top:8px;display:flex;flex-direction:column;gap:4px;"></div>
+    <button id="clearDataBtn" class="btn-ghost" style="margin-top:8px;width:100%;font-size:0.6rem;color:#ef4444;border-color:rgba(239,68,68,0.25);" hidden>Clear All Data</button>
+  </div>
 
-            <div class="mb-6">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Select
-                    S-Parameter</label>
-                <select id="paramSelect" disabled
-                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white mb-3">
-                    <option value="All">All Parameters</option>
-                </select>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Frequency Scale</label>
-                <select id="freqScaleSelect" disabled
-                    class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full p-2.5 dark:bg-gray-700 dark:border-gray-600 dark:placeholder-gray-400 dark:text-white">
-                    <option value="linear">Linear</option>
-                    <option value="log">Logarithmic</option>
-                </select>
-            </div>
+  <div class="sidebar-section" style="padding:14px 16px;">
+    <div class="sec-title" style="margin-bottom:10px;">Display Options</div>
+    <label class="ctrl-label" style="margin-bottom:6px;">S-parameters to show</label>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
+      <select id="paramSelect" class="ctrl-select" disabled>
+        <option value="All">All Parameters</option>
+      </select>
+    </div>
+    <label class="ctrl-label">Frequency Scale</label>
+    <select id="freqScaleSelect" class="ctrl-select" disabled style="margin-top:4px;">
+      <option value="linear">Linear</option>
+      <option value="log" selected>Logarithmic</option>
+    </select>
+  </div>
 
-            <div class="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
-                <h3 class="text-sm font-semibold mb-3">Bandwidth Search</h3>
+  <!-- Bandwidth Search -->
+  <div class="sidebar-section" style="padding:14px 16px;">
+    <div class="sec-title" style="margin-bottom:10px;">Bandwidth Search</div>
+    <label class="ctrl-label">Measurement Mode</label>
+    <select id="bwMode" class="ctrl-select" disabled style="margin-top:4px;margin-bottom:8px;">
+      <option value="auto">Auto-Detect (Snn=RL, Sij=BW)</option>
+      <option value="rl">Return Loss only (S11, S22…)</option>
+      <option value="bw">Transmission BW / Gain (S21, S12…)</option>
+    </select>
+    <label id="bwThresholdLabel" class="ctrl-label">Threshold (dB below peak)</label>
+    <input type="number" id="bwThreshold" class="ctrl-input" disabled value="-3" step="0.1" style="margin-top:4px;">
+    <p id="bwThresholdHint" style="font-family:'JetBrains Mono',monospace;font-size:0.58rem;color:#3a5570;margin:5px 0 10px;line-height:1.5;">
+      e.g. −3 dB → 3 dB below passband peak
+    </p>
+    <button id="calcBwBtn" class="btn-cyber-solid" disabled>⊙ Calculate &amp; Highlight</button>
+    <button id="clearBwBtn" class="btn-ghost" disabled style="width:100%;margin-top:6px;display:none;">Clear Highlights</button>
+  </div>
 
-                <!-- Mode selector -->
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1">Measurement Mode</label>
-                <div class="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-500 mb-3 text-xs font-medium" id="bwModeGroup">
-                    <button data-mode="passband"
-                        class="bw-mode-btn flex-1 py-1.5 px-1 bg-brand-500 text-white transition-colors"
-                        title="S21, S12, S31… — find the peak and measure where curve stays within threshold">
-                        📡 BW / Gain
-                    </button>
-                    <button data-mode="returnloss"
-                        class="bw-mode-btn flex-1 py-1.5 px-1 bg-white dark:bg-gray-600 text-gray-700 dark:text-gray-200 transition-colors"
-                        title="S11, S22, S33… — find the notch (deepest return loss) and measure where curve stays below threshold">
-                        🔁 Return Loss
-                    </button>
-                </div>
 
-                <!-- Dynamic hint -->
-                <p id="bwModeHint" class="text-xs text-gray-400 dark:text-gray-400 mb-2 leading-tight">
-                    Measures <strong>S21/S12/Sij (i≠j)</strong> passband: region where magnitude stays within <em>threshold</em> dB of the peak.
-                </p>
+</aside>
 
-                <label class="block text-xs text-gray-500 dark:text-gray-400 mb-1" id="bwThresholdLabel">Threshold (dB from peak)</label>
-                <input type="number" id="bwThreshold" disabled value="3" step="0.1"
-                    class="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg block w-full p-2 mb-3 dark:bg-gray-600 dark:border-gray-500 dark:text-white">
+<!-- ══════════ MAIN CONTENT ══════════ -->
+<main id="mainContent" style="flex:1;overflow-y:auto;background:#090e17;padding:16px 20px;">
 
-                <button id="calcBwBtn" disabled
-                    class="w-full bg-brand-500 hover:bg-brand-600 text-white font-medium rounded-lg text-sm px-4 py-2 transition-colors">Calculate
-                    &amp; Highlight</button>
-                <button id="clearBwBtn" disabled
-                    class="w-full mt-2 bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-600 dark:hover:bg-gray-500 dark:text-white font-medium rounded-lg text-sm px-4 py-2 transition-colors hidden">Clear
-                    Highlight</button>
-            </div>
+  <!-- Charts grid -->
+  <div class="grid grid-cols-1 xl:grid-cols-2 gap-4" style="margin-bottom:16px;">
 
-            <div>
-                <h3 class="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">Active Datasets</h3>
-                <ul id="datasetList" class="space-y-2 text-sm">
-                    <li class="text-gray-400 italic">No files loaded.</li>
-                </ul>
-                <button id="clearDataBtn" class="mt-4 text-xs text-red-500 hover:text-red-700 hidden">Clear All
-                    Data</button>
-            </div>
-        </aside>
-
-        <main class="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-gray-900 relative" id="mainContent">
-            <div class="max-w-full mx-auto space-y-6">
-
-                <div class="flex justify-end gap-3 mb-2">
-                    <button id="printBtn" aria-label="Print Report"
-                        class="bg-white dark:bg-gray-800 text-brand-600 dark:text-brand-400 border border-brand-200 dark:border-brand-800 shadow-sm text-sm px-4 py-2 rounded-md hover:bg-brand-50 dark:hover:bg-gray-700 transition flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                            xmlns="http://www.w3.org/2000/svg">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z">
-                            </path>
-                        </svg>
-                        Print Data
-                    </button>
-                    <button id="resetZoomBtn" aria-label="Reset Zoom"
-                        class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 shadow-sm text-sm px-4 py-2 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition">Reset
-                        Zoom</button>
-                </div>
-
-                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                    <div
-                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
-                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                            data-target="plot-mag" aria-label="Toggle Fullscreen">⛶</button>
-                        <div id="plot-mag" class="chart-container"></div>
-                    </div>
-                    <div
-                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
-                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                            data-target="plot-phase" aria-label="Toggle Fullscreen">⛶</button>
-                        <div id="plot-phase" class="chart-container"></div>
-                    </div>
-                    <div
-                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
-                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                            data-target="plot-gd" aria-label="Toggle Fullscreen">⛶</button>
-                        <div id="plot-gd" class="chart-container"></div>
-                    </div>
-                    <div
-                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
-                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                            data-target="plot-vswr" aria-label="Toggle Fullscreen">⛶</button>
-                        <div id="plot-vswr" class="chart-container"></div>
-                    </div>
-                    <div
-                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
-                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                            data-target="plot-z" aria-label="Toggle Fullscreen">⛶</button>
-                        <div id="plot-z" class="chart-container"></div>
-                    </div>
-                    <div
-                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
-                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                            data-target="plot-smith" aria-label="Toggle Fullscreen">⛶</button>
-                        <div id="plot-smith" class="chart-container"></div>
-                    </div>
-                    <div
-                        class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 relative">
-                        <button class="fullscreen-btn text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-                            data-target="plot-3d-gd" aria-label="Toggle Fullscreen">⛶</button>
-                        <div id="plot-3d-gd" class="chart-container"></div>
-                    </div>
-                </div>
-
-                <div
-                    class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 overflow-x-auto">
-                    <div class="flex justify-between items-center mb-4">
-                        <h2 class="text-lg font-bold">Marker Table</h2>
-                        <span class="text-xs text-gray-500">Click on any trace in the plots to add a synced
-                            marker.</span>
-                    </div>
-                    <table id="markerTable">
-                        <thead>
-                            <tr>
-                                <th>Marker ID</th>
-                                <th>Dataset</th>
-                                <th>Param</th>
-                                <th>Freq</th>
-                                <th>Mag (dB)</th>
-                                <th>Phase</th>
-                                <th>VSWR</th>
-                                <th>Group Delay</th>
-                                <th>Impedance Z</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="10" class="text-center text-gray-500">No markers added.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <div
-                    class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 overflow-x-auto">
-                    <h2 class="text-lg font-bold mb-4">Bandwidth Table</h2>
-                    <table id="bwTable">
-                        <thead>
-                            <tr>
-                                <th>Dataset</th>
-                                <th>Parameter</th>
-                                <th>Type</th>
-                                <th>Peak / Notch Freq</th>
-                                <th>BW Start Freq</th>
-                                <th>BW Stop Freq</th>
-                                <th>Threshold</th>
-                                <th>Bandwidth</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="8" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-
-            </div>
-        </main>
+    <!-- Magnitude -->
+    <div class="chart-card">
+      <div class="chart-label">Magnitude (dB)</div>
+      <button class="fullscreen-btn" data-target="plot-mag" aria-label="Toggle Fullscreen">⛶</button>
+      <div id="plot-mag" class="chart-container"></div>
     </div>
 
-    <script>
-        const AppState = {
-            datasets: [],
-            selectedParam: 'All',
-            freqScaleType: 'linear',
-            markers: [],
-            bwHighlights: [],   // [{ fStart, fStop, color, param, type }]
-            bwMode: 'passband', // 'passband' | 'returnloss'
-            isDark: false,
-            colorPalette: ['#0ea5e9', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
-        };
+    <!-- Phase -->
+    <div class="chart-card">
+      <div class="chart-label">Phase (°)</div>
+      <button class="fullscreen-btn" data-target="plot-phase" aria-label="Toggle Fullscreen">⛶</button>
+      <div id="plot-phase" class="chart-container"></div>
+    </div>
 
-        const DOM = {
-            fileInput: document.getElementById('fileInput'),
-            paramSelect: document.getElementById('paramSelect'),
-            freqScaleSelect: document.getElementById('freqScaleSelect'),
-            datasetList: document.getElementById('datasetList'),
-            clearDataBtn: document.getElementById('clearDataBtn'),
-            resetZoomBtn: document.getElementById('resetZoomBtn'),
-            printBtn: document.getElementById('printBtn'),
-            calcBwBtn: document.getElementById('calcBwBtn'),
-            clearBwBtn: document.getElementById('clearBwBtn'),
-            bwThreshold: document.getElementById('bwThreshold'),
-            themeToggle: document.getElementById('themeToggle'),
-            markerTableBody: document.querySelector('#markerTable tbody'),
-            bwTableBody: document.querySelector('#bwTable tbody')
-        };
+    <!-- Group Delay -->
+    <div class="chart-card">
+      <div class="chart-label">Group Delay (ns) <span style="font-size:0.55rem;color:#3a5570;margin-left:8px;">−dφ/dω per S-parameter · smoothed derivative of unwrapped phase</span></div>
+      <button class="fullscreen-btn" data-target="plot-gd" aria-label="Toggle Fullscreen">⛶</button>
+      <div id="gdStatBar" style="padding:4px 12px 0;display:flex;gap:8px;flex-wrap:wrap;"></div>
+      <div id="plot-gd" class="chart-container" style="height:300px;"></div>
+    </div>
 
-        const PLOT_DIVS = ['plot-mag', 'plot-phase', 'plot-gd', 'plot-vswr', 'plot-z', 'plot-smith', 'plot-3d-gd'];
-        let isSyncing = false;
-        let listenersAttached = false;
+    <!-- VSWR -->
+    <div class="chart-card">
+      <div class="chart-label">VSWR (ratio)</div>
+      <button class="fullscreen-btn" data-target="plot-vswr" aria-label="Toggle Fullscreen">⛶</button>
+      <div id="plot-vswr" class="chart-container"></div>
+    </div>
 
-        const Utils = {
-            escapeHTML: (str) => str.replace(/[&<>'"]/g, tag => ({
-                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
-            }[tag]))
-        };
+    <!-- Impedance -->
+    <div class="chart-card">
+      <div class="chart-label">Impedance |Z| (Ω)</div>
+      <button class="fullscreen-btn" data-target="plot-z" aria-label="Toggle Fullscreen">⛶</button>
+      <div id="plot-z" class="chart-container"></div>
+    </div>
 
-        const MathUtils = {
-            cMag: (re, im) => Math.sqrt(re * re + im * im),
-            cPhase: (re, im) => Math.atan2(im, re) * (180 / Math.PI),
-            magToDb: (mag) => 20 * Math.log10(mag + 1e-15),
-            dbToMag: (db) => Math.pow(10, db / 20),
-            cDiv: (r1, i1, r2, i2) => {
-                const den = r2 * r2 + i2 * i2;
-                return { re: (r1 * r2 + i1 * i2) / den, im: (i1 * r2 - r1 * i2) / den };
-            },
-            calcImpedance: (reS, imS, z0) => {
-                const zNorm = MathUtils.cDiv(1 + reS, imS, 1 - reS, -imS);
-                return { re: zNorm.re * z0, im: zNorm.im * z0 };
-            },
-            calcVSWR: (mag) => (mag >= 1) ? Infinity : (1 + mag) / (1 - mag),
-            unwrapPhase: (phaseArr) => {
-                const unwrapped = new Float64Array(phaseArr.length);
-                unwrapped[0] = phaseArr[0];
-                for (let i = 1; i < phaseArr.length; i++) {
-                    let diff = phaseArr[i] - phaseArr[i - 1];
-                    while (diff > Math.PI) diff -= 2 * Math.PI;
-                    while (diff < -Math.PI) diff += 2 * Math.PI;
-                    unwrapped[i] = unwrapped[i - 1] + diff;
-                }
-                return unwrapped;
-            },
-            calcGroupDelay: (freqHzArr, phaseDegArr) => {
-                const gd = new Float64Array(freqHzArr.length);
-                const unwrapped = MathUtils.unwrapPhase(phaseDegArr.map(p => p * Math.PI / 180));
-                gd[0] = 0;
-                for (let i = 1; i < freqHzArr.length; i++) {
-                    const df = freqHzArr[i] - freqHzArr[i - 1];
-                    gd[i] = df === 0 ? gd[i - 1] : - (unwrapped[i] - unwrapped[i - 1]) / (2 * Math.PI * df) * 1e9;
-                }
-                gd[0] = gd[1];
-                return Array.from(gd);
-            }
-        };
+    <!-- Smith Chart -->
+    <div class="chart-card">
+      <div class="chart-label">Smith Chart</div>
+      <button class="fullscreen-btn" data-target="plot-smith" aria-label="Toggle Fullscreen">⛶</button>
+      <div id="plot-smith" class="chart-container"></div>
+    </div>
 
-        class TouchstoneParser {
-            static parse(content, filename) {
-                const lines = content.split(/\r?\n/);
-                let z0 = 50, freqUnit = 'GHZ', format = 'MA', numPorts = 2;
-                const extMatch = filename.match(/\.s(\d)p$/i);
-                if (extMatch) numPorts = parseInt(extMatch[1], 10);
+    <!-- 3D Group Delay Surface — full width -->
+    <div class="chart-card xl:col-span-2">
+      <div class="chart-label">Group Delay Surface · Phi × Theta <span style="font-size:0.55rem;color:#3a5570;margin-left:8px;">3D view · drag to rotate · scroll to zoom</span></div>
+      <button class="fullscreen-btn" data-target="plot-3d-gd" aria-label="Toggle Fullscreen">⛶</button>
+      <div id="plot-3d-gd" class="chart-container" style="height:420px;"></div>
+    </div>
 
-                const data = { Freq: [] };
-                for (let i = 1; i <= numPorts; i++)
-                    for (let j = 1; j <= numPorts; j++)
-                        data[`S${i}${j}`] = { re: [], im: [] };
+  </div>
 
-                let dataBuffer = [];
-                for (let line of lines) {
-                    line = line.trim();
-                    if (!line || line.startsWith('!')) continue;
-                    if (line.startsWith('#')) {
-                        const parts = line.substring(1).trim().toUpperCase().split(/\s+/);
-                        if (parts.includes('HZ')) freqUnit = 'HZ';
-                        else if (parts.includes('KHZ')) freqUnit = 'KHZ';
-                        else if (parts.includes('MHZ')) freqUnit = 'MHZ';
-                        else freqUnit = 'GHZ';
+  <!-- Marker Table -->
+  <div class="chart-card" style="margin-bottom:16px;padding:0;">
+    <div style="padding:12px 16px 8px;border-bottom:1px solid rgba(0,212,200,0.1);display:flex;justify-content:space-between;align-items:center;">
+      <span class="sec-title">Marker Table</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:0.58rem;color:#3a5570;">Click any trace to place a marker</span>
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="markerTable">
+        <thead><tr>
+          <th>ID</th><th>Dataset</th><th>Param</th><th>Frequency</th>
+          <th>Mag (dB)</th><th>Phase (°)</th><th>VSWR</th>
+          <th>Group Delay</th><th>Impedance Z</th><th>×</th>
+        </tr></thead>
+        <tbody><tr><td colspan="10" style="color:#3a5570;text-align:center;padding:16px;">No markers added.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
 
-                        if (parts.includes('MA')) format = 'MA';
-                        else if (parts.includes('DB')) format = 'DB';
-                        else if (parts.includes('RI')) format = 'RI';
+  <!-- Bandwidth / Return Loss Table -->
+  <div class="chart-card" style="padding:0;">
+    <div style="padding:12px 16px 8px;border-bottom:1px solid rgba(0,212,200,0.1);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+      <span class="sec-title">Bandwidth / Return Loss Table</span>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <span style="display:flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:0.58rem;color:#6b8fa8;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:1px;background:rgba(245,158,11,0.5);"></span> BW
+        </span>
+        <span style="display:flex;align-items:center;gap:4px;font-family:'JetBrains Mono',monospace;font-size:0.58rem;color:#6b8fa8;">
+          <span style="display:inline-block;width:10px;height:10px;border-radius:1px;background:rgba(239,68,68,0.5);"></span> Return Loss
+        </span>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="bwTable">
+        <thead><tr>
+          <th>Dataset</th><th>Param</th><th>Type</th><th>Reference</th>
+          <th>Start Freq</th><th>Stop Freq</th><th>Threshold</th><th>Bandwidth</th>
+        </tr></thead>
+        <tbody><tr><td colspan="8" style="color:#3a5570;text-align:center;padding:16px;">Calculate bandwidth from sidebar.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
 
-                        const rIndex = parts.indexOf('R');
-                        if (rIndex !== -1 && parts.length > rIndex + 1) z0 = parseFloat(parts[rIndex + 1]);
-                        continue;
-                    }
-                    dataBuffer.push(...line.split(/\s+/).map(parseFloat).filter(n => !isNaN(n)));
-                }
+</main>
+</div><!-- end layout -->
 
-                const valuesPerRow = 1 + 2 * (numPorts * numPorts);
-                for (let i = 0; i < dataBuffer.length; i += valuesPerRow) {
-                    if (i + valuesPerRow > dataBuffer.length) break;
-                    let freq = dataBuffer[i];
-                    if (freqUnit === 'KHZ') freq *= 1e3;
-                    else if (freqUnit === 'MHZ') freq *= 1e6;
-                    else if (freqUnit === 'GHZ') freq *= 1e9;
-                    data.Freq.push(freq);
+<script>
+  /* ══════════════════════════════════════════════════════
+     APP STATE
+  ══════════════════════════════════════════════════════ */
+  const AppState = {
+    datasets: [],
+    selectedParam: 'All',
+    freqScaleType: 'log',
+    markers: [],
+    bwHighlights: [],
+    rlHighlights: [],
+    isDark: false,
+    colorPalette: ['#00d4c8','#f59e0b','#8b5cf6','#10b981','#ef4444','#60a5fa','#fb923c','#a78bfa']
+  };
 
-                    let offset = 1;
-                    for (let r = 1; r <= numPorts; r++) {
-                        for (let c = 1; c <= numPorts; c++) {
-                            let v1 = dataBuffer[i + offset], v2 = dataBuffer[i + offset + 1];
-                            offset += 2;
-                            let re, im;
-                            if (format === 'RI') { re = v1; im = v2; }
-                            else if (format === 'MA') {
-                                const mag = v1, phaseRad = v2 * Math.PI / 180;
-                                re = mag * Math.cos(phaseRad); im = mag * Math.sin(phaseRad);
-                            } else if (format === 'DB') {
-                                const mag = MathUtils.dbToMag(v1), phaseRad = v2 * Math.PI / 180;
-                                re = mag * Math.cos(phaseRad); im = mag * Math.sin(phaseRad);
-                            }
-                            let pName = `S${r}${c}`;
-                            if (numPorts === 2) {
-                                if (offset === 5) pName = 'S21';
-                                else if (offset === 7) pName = 'S12';
-                            }
-                            data[pName].re.push(re);
-                            data[pName].im.push(im);
-                        }
-                    }
-                }
-                return { filename, data, info: { z0, format, freqUnit, numPorts }, visible: true };
-            }
+  const DOM = {
+    fileInput:        document.getElementById('fileInput'),
+    paramSelect:      document.getElementById('paramSelect'),
+    freqScaleSelect:  document.getElementById('freqScaleSelect'),
+    datasetList:      document.getElementById('datasetList'),
+    clearDataBtn:     document.getElementById('clearDataBtn'),
+    resetZoomBtn:     document.getElementById('resetZoomBtn'),
+    calcBwBtn:        document.getElementById('calcBwBtn'),
+    clearBwBtn:       document.getElementById('clearBwBtn'),
+    bwThreshold:      document.getElementById('bwThreshold'),
+    bwMode:           document.getElementById('bwMode'),
+    bwThresholdLabel: document.getElementById('bwThresholdLabel'),
+    bwThresholdHint:  document.getElementById('bwThresholdHint'),
+    themeToggle:      document.getElementById('themeToggle'),
+    markerTableBody:  document.querySelector('#markerTable tbody'),
+    bwTableBody:      document.querySelector('#bwTable tbody')
+  };
+
+  const PLOT_DIVS = ['plot-mag','plot-phase','plot-gd','plot-vswr','plot-z','plot-smith','plot-3d-gd'];
+  let isSyncing = false;
+  let listenersAttached = false;
+
+  /* ══════════════════════════════════════════════════════
+     UTILITIES
+  ══════════════════════════════════════════════════════ */
+  const Utils = {
+    escapeHTML: s => s.replace(/[&<>'"]/g, t =>
+      ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[t]))
+  };
+
+  const MathUtils = {
+    cMag:    (re, im) => Math.sqrt(re*re + im*im),
+    cPhase:  (re, im) => Math.atan2(im, re) * (180/Math.PI),
+    magToDb: mag      => 20 * Math.log10(mag + 1e-15),
+    dbToMag: db       => Math.pow(10, db/20),
+    cDiv: (r1,i1,r2,i2) => {
+      const d = r2*r2+i2*i2;
+      return { re:(r1*r2+i1*i2)/d, im:(i1*r2-r1*i2)/d };
+    },
+    calcImpedance: (reS,imS,z0) => {
+      const zN = MathUtils.cDiv(1+reS,imS,1-reS,-imS);
+      return { re: zN.re*z0, im: zN.im*z0 };
+    },
+    calcVSWR: mag => (mag >= 1) ? Infinity : (1+mag)/(1-mag),
+    unwrapPhase: arr => {
+      const u = new Float64Array(arr.length);
+      u[0] = arr[0];
+      for (let i=1;i<arr.length;i++){
+        let d = arr[i]-arr[i-1];
+        while(d > Math.PI)  d -= 2*Math.PI;
+        while(d < -Math.PI) d += 2*Math.PI;
+        u[i] = u[i-1]+d;
+      }
+      return u;
+    },
+    calcGroupDelay: (fArr,phDegArr) => {
+      const gd = new Float64Array(fArr.length);
+      const u  = MathUtils.unwrapPhase(phDegArr.map(p=>p*Math.PI/180));
+      gd[0] = 0;
+      for(let i=1;i<fArr.length;i++){
+        const df = fArr[i]-fArr[i-1];
+        gd[i] = df===0 ? gd[i-1] : -(u[i]-u[i-1])/(2*Math.PI*df)*1e9;
+      }
+      gd[0] = gd[1];
+      return Array.from(gd);
+    }
+  };
+
+  /* ══════════════════════════════════════════════════════
+     TOUCHSTONE PARSER
+  ══════════════════════════════════════════════════════ */
+  class TouchstoneParser {
+    static parse(content, filename) {
+      const lines = content.split(/\r?\n/);
+      let z0=50, freqUnit='GHZ', format='MA', numPorts=2;
+      const ext = filename.match(/\.s(\d)p$/i);
+      if(ext) numPorts = parseInt(ext[1],10);
+      const data = { Freq:[] };
+      for(let i=1;i<=numPorts;i++) for(let j=1;j<=numPorts;j++) data[`S${i}${j}`]={re:[],im:[]};
+      let buf = [];
+      for(let line of lines){
+        line = line.trim();
+        if(!line||line.startsWith('!')) continue;
+        if(line.startsWith('#')){
+          const p = line.substring(1).trim().toUpperCase().split(/\s+/);
+          if(p.includes('HZ'))  freqUnit='HZ';
+          else if(p.includes('KHZ')) freqUnit='KHZ';
+          else if(p.includes('MHZ')) freqUnit='MHZ';
+          else freqUnit='GHZ';
+          if(p.includes('MA'))  format='MA';
+          else if(p.includes('DB')) format='DB';
+          else if(p.includes('RI')) format='RI';
+          const ri = p.indexOf('R');
+          if(ri!==-1&&p.length>ri+1) z0=parseFloat(p[ri+1]);
+          continue;
         }
-
-        function computeDerivedData(dataset, param) {
-            const f = dataset.data.Freq;
-            const re = dataset.data[param].re;
-            const im = dataset.data[param].im;
-            const z0 = dataset.info.z0;
-            const n = f.length;
-
-            const magDb = new Float64Array(n), phaseDeg = new Float64Array(n);
-            const vswr = new Float64Array(n), zRe = new Float64Array(n), zIm = new Float64Array(n);
-
-            for (let i = 0; i < n; i++) {
-                const mag = MathUtils.cMag(re[i], im[i]);
-                magDb[i] = MathUtils.magToDb(mag);
-                phaseDeg[i] = MathUtils.cPhase(re[i], im[i]);
-                vswr[i] = MathUtils.calcVSWR(mag);
-                const z = MathUtils.calcImpedance(re[i], im[i], z0);
-                zRe[i] = z.re; zIm[i] = z.im;
-            }
-            const gd = MathUtils.calcGroupDelay(f, Array.from(phaseDeg));
-
-            return {
-                f: f, magDb: Array.from(magDb), phaseDeg: Array.from(phaseDeg),
-                vswr: Array.from(vswr), gd: gd, zRe: Array.from(zRe), zIm: Array.from(zIm),
-                re: re, im: im
-            };
+        buf.push(...line.split(/\s+/).map(parseFloat).filter(n=>!isNaN(n)));
+      }
+      const vpr = 1+2*(numPorts*numPorts);
+      for(let i=0;i<buf.length;i+=vpr){
+        if(i+vpr>buf.length) break;
+        let freq=buf[i];
+        if(freqUnit==='KHZ') freq*=1e3;
+        else if(freqUnit==='MHZ') freq*=1e6;
+        else if(freqUnit==='GHZ') freq*=1e9;
+        data.Freq.push(freq);
+        let off=1;
+        for(let r=1;r<=numPorts;r++) for(let c=1;c<=numPorts;c++){
+          let v1=buf[i+off], v2=buf[i+off+1]; off+=2;
+          let re,im;
+          if(format==='RI'){re=v1;im=v2;}
+          else if(format==='MA'){const m=v1,p=v2*Math.PI/180;re=m*Math.cos(p);im=m*Math.sin(p);}
+          else{const m=MathUtils.dbToMag(v1),p=v2*Math.PI/180;re=m*Math.cos(p);im=m*Math.sin(p);}
+          let pn=`S${r}${c}`;
+          if(numPorts===2){if(off===5)pn='S21';else if(off===7)pn='S12';}
+          data[pn].re.push(re);data[pn].im.push(im);
         }
+      }
+      return { filename, data, info:{z0,format,freqUnit,numPorts}, visible:true };
+    }
+  }
 
-        function getDynamicFreqScale() {
-            let maxF = 0;
-            AppState.datasets.filter(d => d.visible).forEach(ds => {
-                if (ds.data.Freq.length) maxF = Math.max(maxF, ds.data.Freq[ds.data.Freq.length - 1]);
-            });
-            if (maxF >= 1e9) return { div: 1e9, unit: 'GHz' };
-            if (maxF >= 1e6) return { div: 1e6, unit: 'MHz' };
-            if (maxF >= 1e3) return { div: 1e3, unit: 'kHz' };
-            return { div: 1, unit: 'Hz' };
+  /* ══════════════════════════════════════════════════════
+     DERIVED DATA
+  ══════════════════════════════════════════════════════ */
+  function computeDerivedData(dataset, param) {
+    const f=dataset.data.Freq, re=dataset.data[param].re, im=dataset.data[param].im, z0=dataset.info.z0, n=f.length;
+    const magDb=new Float64Array(n), phaseDeg=new Float64Array(n), vswr=new Float64Array(n), zRe=new Float64Array(n), zIm=new Float64Array(n);
+    for(let i=0;i<n;i++){
+      const mag=MathUtils.cMag(re[i],im[i]);
+      magDb[i]=MathUtils.magToDb(mag); phaseDeg[i]=MathUtils.cPhase(re[i],im[i]); vswr[i]=MathUtils.calcVSWR(mag);
+      const z=MathUtils.calcImpedance(re[i],im[i],z0); zRe[i]=z.re; zIm[i]=z.im;
+    }
+    const gd=MathUtils.calcGroupDelay(f,Array.from(phaseDeg));
+    return { f, magDb:Array.from(magDb), phaseDeg:Array.from(phaseDeg), vswr:Array.from(vswr), gd, zRe:Array.from(zRe), zIm:Array.from(zIm), re, im };
+  }
+
+  function getDynamicFreqScale() {
+    let maxF=0;
+    AppState.datasets.filter(d=>d.visible).forEach(ds=>{if(ds.data.Freq.length) maxF=Math.max(maxF,ds.data.Freq[ds.data.Freq.length-1]);});
+    if(maxF>=1e9) return {div:1e9,unit:'GHz'};
+    if(maxF>=1e6) return {div:1e6,unit:'MHz'};
+    if(maxF>=1e3) return {div:1e3,unit:'kHz'};
+    return {div:1,unit:'Hz'};
+  }
+
+  /* ══════════════════════════════════════════════════════
+     PLOTLY LAYOUT FACTORY  — dark cyber theme
+  ══════════════════════════════════════════════════════ */
+  function getLayout(title, xTitle, yTitle) {
+    const dark = AppState.isDark;
+    const plotBg   = dark ? '#090e17' : '#ffffff';
+    const gridCol  = dark ? 'rgba(0,212,200,0.06)' : 'rgba(0,150,140,0.1)';
+    const zeroCol  = dark ? 'rgba(0,212,200,0.15)' : 'rgba(0,150,140,0.2)';
+    const axisCol  = dark ? '#4a7a99' : '#4a6a7a';
+    const titleCol = dark ? '#00d4c8' : '#007a75';
+    const lineCol  = dark ? 'rgba(0,212,200,0.15)' : 'rgba(0,150,140,0.2)';
+    const legendCol= dark ? '#4a7a99' : '#4a6a7a';
+    const hoverBg  = dark ? '#0e1520' : '#ffffff';
+    const hoverBrd = dark ? 'rgba(0,212,200,0.4)' : 'rgba(0,150,140,0.4)';
+    return {
+      title: { text: title, font: { family:"'JetBrains Mono',monospace", color:titleCol, size:11 }, x:0.02, xanchor:'left' },
+      paper_bgcolor: 'transparent',
+      plot_bgcolor:  plotBg,
+      margin: { t:32, r:16, b:48, l:60 },
+      font:  { family:"'JetBrains Mono',monospace", color:axisCol, size:10 },
+      xaxis: {
+        title: { text:xTitle, font:{color:axisCol,size:10} },
+        type: AppState.freqScaleType,
+        gridcolor: gridCol, zerolinecolor: zeroCol,
+        color: axisCol, tickfont:{color:axisCol,size:9},
+        linecolor: lineCol, showline:true
+      },
+      yaxis: {
+        title: { text:yTitle, font:{color:axisCol,size:10} },
+        gridcolor: gridCol, zerolinecolor: zeroCol,
+        color: axisCol, tickfont:{color:axisCol,size:9},
+        linecolor: lineCol, showline:true
+      },
+      showlegend: true,
+      legend: { orientation:'h', y:-0.22, font:{color:legendCol,size:9,family:"'JetBrains Mono',monospace"}, bgcolor:'transparent' },
+      hovermode: 'closest',
+      hoverlabel: { bgcolor:hoverBg, bordercolor:hoverBrd, font:{family:"'JetBrains Mono',monospace",color: dark?'#c8d6e8':'#1a2332',size:10} },
+      shapes: []
+    };
+  }
+
+  /* ══════════════════════════════════════════════════════
+     RENDER PLOTS
+  ══════════════════════════════════════════════════════ */
+  function renderPlots() {
+    const freqScale=getDynamicFreqScale();
+    const xTitle=`Frequency (${freqScale.unit})`;
+    const traces={mag:[],phase:[],gd:[],vswr:[],z:[],smith:[]};
+    let ci=0;
+    const paramsToRender=AppState.selectedParam==='All'?null:AppState.selectedParam;
+
+    AppState.datasets.filter(d=>d.visible).forEach(ds=>{
+      const keys=paramsToRender?[paramsToRender]:Object.keys(ds.data).filter(k=>k.startsWith('S'));
+      keys.forEach(param=>{
+        if(!ds.data[param]) return;
+        const comp=computeDerivedData(ds,param);
+        const color=AppState.colorPalette[ci%AppState.colorPalette.length];
+        const name=`${ds.filename} - ${param}`;
+        const fSc=comp.f.map(hz=>hz/freqScale.div);
+        const base={x:fSc,name,type:'scatter',mode:'lines',
+          line:{color,width:1.5},customdata:comp.f,meta:{filename:ds.filename,param}};
+        traces.mag.push({...base,y:comp.magDb});
+        traces.phase.push({...base,y:comp.phaseDeg});
+        traces.gd.push({...base,y:comp.gd});
+        traces.vswr.push({...base,y:comp.vswr});
+        traces.z.push({...base,y:comp.zRe.map((re,i)=>MathUtils.cMag(re,comp.zIm[i]))});
+        traces.smith.push({type:'scattersmith',real:comp.re,imag:comp.im,name,marker:{color,size:2},line:{color}});
+        ci++;
+      });
+    });
+
+    if(AppState.markers.length>0){
+      const mx=AppState.markers.map(m=>m.freqHz/freqScale.div);
+      const mt=(yv)=>({x:mx,y:yv,type:'scatter',mode:'markers',name:'Markers',
+        marker:{color:'#ff4444',size:8,symbol:'cross',line:{color:'#ff4444',width:2}},showlegend:false});
+      traces.mag.push(mt(AppState.markers.map(m=>m.magDb)));
+      traces.phase.push(mt(AppState.markers.map(m=>m.phaseDeg)));
+      traces.gd.push(mt(AppState.markers.map(m=>m.gd)));
+      traces.vswr.push(mt(AppState.markers.map(m=>m.vswr===Infinity?null:m.vswr)));
+      traces.z.push(mt(AppState.markers.map(m=>MathUtils.cMag(m.zRe,m.zIm))));
+      traces.smith.push({type:'scattersmith',real:AppState.markers.map(m=>m.reS),imag:AppState.markers.map(m=>m.imS),
+        mode:'markers',marker:{color:'#ff4444',size:8,symbol:'cross'},showlegend:false});
+    }
+
+    const layouts={
+      mag:   getLayout('MAGNITUDE',   xTitle,'Magnitude (dB)'),
+      phase: getLayout('PHASE',       xTitle,'Phase (°)'),
+      gd:    getLayout('GROUP DELAY', xTitle,'Group Delay (ns)'),
+      vswr:  getLayout('VSWR',        xTitle,'VSWR (ratio)'),
+      z:     getLayout('IMPEDANCE',   xTitle,'|Z| (Ω)')
+    };
+
+    // BW highlight shapes
+    if(AppState.bwHighlights.length>0||AppState.rlHighlights.length>0){
+      const bwS=AppState.bwHighlights.map(b=>({
+        type:'rect',xref:'x',yref:'paper',x0:b.fStart/freqScale.div,x1:b.fStop/freqScale.div,y0:0,y1:1,
+        fillcolor:'rgba(245,158,11,0.12)',line:{color:'rgba(245,158,11,0.45)',width:1}
+      }));
+      const rlS=AppState.rlHighlights.map(b=>({
+        type:'rect',xref:'x',yref:'paper',x0:b.fStart/freqScale.div,x1:b.fStop/freqScale.div,y0:0,y1:1,
+        fillcolor:'rgba(239,68,68,0.1)',line:{color:'rgba(239,68,68,0.4)',width:1}
+      }));
+      Object.values(layouts).forEach(l=>l.shapes=[...bwS,...rlS]);
+    }
+
+    const cfg={responsive:true,displayModeBar:false};
+    Plotly.react('plot-mag',   traces.mag,   layouts.mag,   cfg);
+    Plotly.react('plot-phase', traces.phase, layouts.phase, cfg);
+    Plotly.react('plot-gd',    traces.gd,    layouts.gd,    cfg);
+    Plotly.react('plot-vswr',  traces.vswr,  layouts.vswr,  cfg);
+    Plotly.react('plot-z',     traces.z,     layouts.z,     cfg);
+
+    // Smith Chart
+    const smDark = AppState.isDark;
+    Plotly.react('plot-smith', traces.smith, {
+      paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+      margin:{t:32,r:16,b:40,l:20},
+      font:{family:"'JetBrains Mono',monospace",color:smDark?'#6b8fa8':'#4a6a7a',size:10},
+      smith:{
+        realaxis:{gridcolor:smDark?'rgba(0,212,200,0.15)':'rgba(0,150,140,0.2)'},
+        imaginaryaxis:{gridcolor:smDark?'rgba(0,212,200,0.1)':'rgba(0,150,140,0.15)'}
+      },
+      showlegend:true,
+      legend:{orientation:'h',y:-0.15,font:{color:smDark?'#4a7a99':'#4a6a7a',size:9,family:"'JetBrains Mono',monospace"},bgcolor:'transparent'},
+      hovermode:'closest',
+      hoverlabel:{bgcolor:smDark?'#0e1520':'#ffffff',bordercolor:smDark?'rgba(0,212,200,0.4)':'rgba(0,150,140,0.4)',font:{family:"'JetBrains Mono',monospace",color:smDark?'#c8d6e8':'#1a2332',size:10}}
+    }, cfg);
+
+    // ── 3D Surface ──────────────────────────────────────────────────────────
+    const surfTraces=[];
+    const viridis=[[0,'#440154'],[0.111,'#482878'],[0.222,'#3e4989'],[0.333,'#31688e'],[0.444,'#26828e'],[0.556,'#1f9e89'],[0.667,'#35b779'],[0.778,'#6ece58'],[0.889,'#b5de2b'],[1,'#fde725']];
+    const PHI_COLS=80, THETA_ROWS=80, MAX_PTS=5000;
+
+    AppState.datasets.filter(d=>d.visible).forEach(ds=>{
+      const keys=paramsToRender?[paramsToRender]:Object.keys(ds.data).filter(k=>k.startsWith('S'));
+      keys.forEach(param=>{
+        if(!ds.data[param]) return;
+        const comp=computeDerivedData(ds,param); const n=comp.f.length;
+        if(n<2) return;
+        const step=Math.max(1,Math.floor(n/MAX_PTS));
+        const pts=[];
+        for(let i=0;i<n;i+=step){
+          const phi=((i/(n-1))*360);
+          const theta=(comp.phaseDeg[i]+180)/2;
+          pts.push({phi,theta,gd:comp.gd[i]});
         }
-
-        function getLayout(title, xTitle, yTitle, isDark) {
-            const axisColor = isDark ? '#cbd5e1' : '#475569';
-            return {
-                title: { text: title, font: { color: isDark ? '#fff' : '#000', size: 14 } },
-                paper_bgcolor: 'transparent', plot_bgcolor: isDark ? '#1e293b' : '#fff',
-                margin: { t: 40, r: 20, b: 50, l: 70 },
-                xaxis: {
-                    title: { text: xTitle, font: { color: axisColor } },
-                    type: AppState.freqScaleType,
-                    gridcolor: isDark ? '#334155' : '#e2e8f0',
-                    color: axisColor,
-                    tickfont: { color: axisColor }
-                },
-                yaxis: {
-                    title: { text: yTitle, font: { color: axisColor } },
-                    gridcolor: isDark ? '#334155' : '#e2e8f0',
-                    color: axisColor,
-                    tickfont: { color: axisColor }
-                },
-                showlegend: true, hovermode: 'closest',
-                legend: { orientation: 'h', y: -0.25, font: { color: axisColor } },
-                shapes: []
-            };
-        }
-
-        function renderPlots() {
-            const isDark = document.documentElement.classList.contains('dark');
-            const freqScale = getDynamicFreqScale();
-            const xTitle = `Frequency (${freqScale.unit})`;
-
-            const traces = { mag: [], phase: [], gd: [], vswr: [], z: [], smith: [] };
-            let colorIndex = 0;
-            const paramsToRender = AppState.selectedParam === 'All' ? null : AppState.selectedParam;
-
-            AppState.datasets.filter(d => d.visible).forEach(ds => {
-                const keys = paramsToRender ? [paramsToRender] : Object.keys(ds.data).filter(k => k.startsWith('S'));
-                keys.forEach(param => {
-                    if (!ds.data[param]) return;
-                    const comp = computeDerivedData(ds, param);
-                    const color = AppState.colorPalette[colorIndex % AppState.colorPalette.length];
-                    const name = `${ds.filename} - ${param}`;
-                    const fScaled = comp.f.map(hz => hz / freqScale.div);
-
-                    const commonOpts = {
-                        x: fScaled, name: name, type: 'scatter', mode: 'lines', line: { color },
-                        customdata: comp.f, meta: { filename: ds.filename, param: param }
-                    };
-
-                    traces.mag.push({ ...commonOpts, y: comp.magDb });
-                    traces.phase.push({ ...commonOpts, y: comp.phaseDeg });
-                    traces.gd.push({ ...commonOpts, y: comp.gd });
-                    traces.vswr.push({ ...commonOpts, y: comp.vswr });
-
-                    const zMag = comp.zRe.map((re, i) => MathUtils.cMag(re, comp.zIm[i]));
-                    traces.z.push({ ...commonOpts, y: zMag });
-
-                    traces.smith.push({
-                        type: 'scattersmith', real: comp.re, imag: comp.im, name: name,
-                        marker: { color, size: 2 }, line: { color }
-                    });
-                    colorIndex++;
-                });
-            });
-
-            if (AppState.markers.length > 0) {
-                const markerX = AppState.markers.map(m => m.freqHz / freqScale.div);
-                const markerTrace = (yVals, name) => ({
-                    x: markerX, y: yVals, type: 'scatter', mode: 'markers', name: 'Markers',
-                    marker: { color: 'red', size: 10, symbol: 'cross' }, hoverinfo: 'none', showlegend: false
-                });
-
-                traces.mag.push(markerTrace(AppState.markers.map(m => m.magDb), 'M'));
-                traces.phase.push(markerTrace(AppState.markers.map(m => m.phaseDeg), 'M'));
-                traces.gd.push(markerTrace(AppState.markers.map(m => m.gd), 'M'));
-                traces.vswr.push(markerTrace(AppState.markers.map(m => m.vswr === Infinity ? null : m.vswr), 'M'));
-                traces.z.push(markerTrace(AppState.markers.map(m => MathUtils.cMag(m.zRe, m.zIm)), 'M'));
-
-                traces.smith.push({
-                    type: 'scattersmith', real: AppState.markers.map(m => m.reS), imag: AppState.markers.map(m => m.imS),
-                    mode: 'markers', marker: { color: 'red', size: 10, symbol: 'cross' }, showlegend: false, hoverinfo: 'none'
-                });
-            }
-
-            const layouts = {
-                mag: getLayout('Magnitude', xTitle, 'Magnitude (dB)', isDark),
-                phase: getLayout('Phase', xTitle, 'Phase (°)', isDark),
-                gd: getLayout('Group Delay', xTitle, 'Group Delay (ns)', isDark),
-                vswr: getLayout('VSWR', xTitle, 'VSWR (ratio)', isDark),
-                z: getLayout('Impedance (Mag)', xTitle, '|Z| (Ω)', isDark)
-            };
-
-            if (AppState.bwHighlights.length > 0) {
-                const shapes = AppState.bwHighlights.map(bw => ({
-                    type: 'rect', xref: 'x', yref: 'paper',
-                    x0: bw.fStart / freqScale.div, x1: bw.fStop / freqScale.div,
-                    y0: 0, y1: 1,
-                    fillcolor: bw.color || 'rgba(234,179,8,0.2)',
-                    line: { width: 1, color: bw.color ? bw.color.replace('0.25','0.7') : 'rgba(234,179,8,0.7)', dash: 'dot' }
-                }));
-                // Apply highlights to magnitude plot (primary view) and phase plot
-                layouts.mag.shapes  = shapes;
-                layouts.phase.shapes = shapes;
-                layouts.gd.shapes   = shapes;
-            }
-
-            Plotly.react('plot-mag', traces.mag, layouts.mag, { responsive: true });
-            Plotly.react('plot-phase', traces.phase, layouts.phase, { responsive: true });
-            Plotly.react('plot-gd', traces.gd, layouts.gd, { responsive: true });
-            Plotly.react('plot-vswr', traces.vswr, layouts.vswr, { responsive: true });
-            Plotly.react('plot-z', traces.z, layouts.z, { responsive: true });
-
-            const smithLayout = {
-                title: { text: 'Smith Chart', font: { color: isDark ? '#fff' : '#000', size: 14 } },
-                paper_bgcolor: 'transparent', plot_bgcolor: 'transparent', margin: { t: 40, r: 20, b: 40, l: 20 },
-                polar: { bgcolor: isDark ? '#1e293b' : '#fff' },
-                smith: { realaxis: { gridcolor: isDark ? '#475569' : '#cbd5e1' }, imaginaryaxis: { gridcolor: isDark ? '#475569' : '#cbd5e1' } },
-                showlegend: true, hovermode: 'closest', legend: { orientation: 'h', y: -0.1, font: { color: isDark ? '#cbd5e1' : '#475569' } }
-            };
-            Plotly.react('plot-smith', traces.smith, smithLayout, { responsive: true });
-            // ── Surface Plot: Phi (deg) × Theta (deg) → Group Delay (ns) ────────
-            // Matches reference: white walls, viridis colorscale, bold title,
-            // X = Phi (deg), Y = Theta (deg), Z = Group Delay (ns).
-            // Theta is mapped from the unwrapped phase (0–360 range).
-            // Phi is mapped from the frequency axis scaled to 0–360 range so the
-            // surface always fills a full angular sweep — just like antenna pattern
-            // data in the reference image.  Raw data is preserved (no smoothing)
-            // so spikes and peaks remain visible as in the reference.
-            const textColor  = isDark ? '#e2e8f0' : '#111827';
-            const wallColor  = isDark ? '#1e293b'  : '#ffffff';
-            const wallBorder = isDark ? '#334155'  : '#d1d5db';
-            const gridColor3 = isDark ? '#475569'  : '#9ca3af';
-            const titleColor = isDark ? '#f1f5f9'  : '#111827';
-            const surfTraces = [];
-
-            // Viridis colorscale — matches the reference image (blue→cyan→green→yellow)
-            const viridisColorscale = [
-                [0.000, '#440154'], [0.111, '#482878'], [0.222, '#3e4989'],
-                [0.333, '#31688e'], [0.444, '#26828e'], [0.556, '#1f9e89'],
-                [0.667, '#35b779'], [0.778, '#6ece58'], [0.889, '#b5de2b'],
-                [1.000, '#fde725']
-            ];
-
-            // Grid resolution — balance between detail and performance
-            const PHI_COLS   = 80;   // columns → Phi axis (freq mapped 0–360°)
-            const THETA_ROWS = 80;   // rows    → Theta axis (phase mapped 0–180°)
-            const MAX_PTS    = 5000; // max raw points to process
-
-            AppState.datasets.filter(d => d.visible).forEach(ds => {
-                const keys3d = paramsToRender
-                    ? [paramsToRender]
-                    : Object.keys(ds.data).filter(k => k.startsWith('S'));
-
-                keys3d.forEach(param => {
-                    if (!ds.data[param]) return;
-                    const comp = computeDerivedData(ds, param);
-                    const n    = comp.f.length;
-                    if (n < 2) return;
-
-                    // ── 1. Downsample raw points if very dense ──
-                    const step = Math.max(1, Math.floor(n / MAX_PTS));
-                    const pts  = [];   // { phi, theta, gd }
-                    for (let i = 0; i < n; i += step) {
-                        // Map frequency linearly to Phi 0–360°
-                        const phi   = ((i / (n - 1)) * 360);
-                        // Map wrapped phase (−180…+180) to Theta 0–180°
-                        const theta = (comp.phaseDeg[i] + 180) / 2;   // 0–180
-                        pts.push({ phi, theta, gd: comp.gd[i] });
-                    }
-
-                    // ── 2. Build uniform Phi × Theta grid axes ──
-                    const phiAxis   = Array.from({ length: PHI_COLS },   (_, c) => (c / (PHI_COLS   - 1)) * 360);
-                    const thetaAxis = Array.from({ length: THETA_ROWS }, (_, r) => (r / (THETA_ROWS - 1)) * 180);
-
-                    // ── 3. Scatter into nearest grid cell ──
-                    const zGrid = Array.from({ length: THETA_ROWS }, () => new Array(PHI_COLS).fill(null));
-                    const wGrid = Array.from({ length: THETA_ROWS }, () => new Array(PHI_COLS).fill(0));
-
-                    const phiStep   = 360 / (PHI_COLS   - 1);
-                    const thetaStep = 180 / (THETA_ROWS - 1);
-
-                    pts.forEach(({ phi, theta, gd }) => {
-                        const ci = Math.min(PHI_COLS   - 1, Math.round(phi   / phiStep));
-                        const ri = Math.min(THETA_ROWS - 1, Math.round(theta / thetaStep));
-                        if (zGrid[ri][ci] === null) {
-                            zGrid[ri][ci] = gd;
-                            wGrid[ri][ci] = 1;
-                        } else {
-                            // Average multiple hits into same cell
-                            wGrid[ri][ci]++;
-                            zGrid[ri][ci] += (gd - zGrid[ri][ci]) / wGrid[ri][ci];
-                        }
-                    });
-
-                    // ── 4. Fill empty cells: nearest-neighbour per row then col ──
-                    for (let r = 0; r < THETA_ROWS; r++) {
-                        let last = null;
-                        for (let c = 0; c < PHI_COLS; c++) {
-                            if (zGrid[r][c] !== null) last = zGrid[r][c];
-                            else if (last !== null)   zGrid[r][c] = last;
-                        }
-                        last = null;
-                        for (let c = PHI_COLS - 1; c >= 0; c--) {
-                            if (zGrid[r][c] !== null) last = zGrid[r][c];
-                            else if (last !== null)   zGrid[r][c] = last;
-                        }
-                    }
-                    // Column-wise fill for any remaining nulls
-                    for (let c = 0; c < PHI_COLS; c++) {
-                        let last = null;
-                        for (let r = 0; r < THETA_ROWS; r++) {
-                            if (zGrid[r][c] !== null) last = zGrid[r][c];
-                            else if (last !== null)   zGrid[r][c] = last;
-                        }
-                        last = null;
-                        for (let r = THETA_ROWS - 1; r >= 0; r--) {
-                            if (zGrid[r][c] !== null) last = zGrid[r][c];
-                            else if (last !== null)   zGrid[r][c] = last;
-                        }
-                        for (let r = 0; r < THETA_ROWS; r++) {
-                            if (zGrid[r][c] === null) zGrid[r][c] = 0;
-                        }
-                    }
-
-                    // ── 5. Build surface trace (no smoothing — preserve spikes) ──
-                    surfTraces.push({
-                        type: 'surface',
-                        name: `${ds.filename} – ${param}`,
-                        x: phiAxis,        // Phi   (deg) — front floor axis
-                        y: thetaAxis,      // Theta (deg) — side  floor axis
-                        z: zGrid,          // Group Delay (ns) — vertical axis
-                        colorscale: viridisColorscale,
-                        showscale: true,
-                        opacity: 1.0,
-                        colorbar: {
-                            title: { text: 'GD (ns)', font: { color: textColor, size: 11 }, side: 'right' },
-                            tickfont: { color: textColor, size: 10 },
-                            thickness: 18,
-                            len: 0.75,
-                            x: 1.02
-                        },
-                        contours: {
-                            x: { highlight: false },
-                            y: { highlight: false },
-                            z: { highlight: false }
-                        },
-                        hovertemplate:
-                            `<b>${ds.filename} – ${param}</b><br>` +
-                            `Phi: %{x:.1f}°<br>` +
-                            `Theta: %{y:.1f}°<br>` +
-                            `GD: %{z:.3f} ns<extra></extra>`,
-                        lighting: { ambient: 0.85, diffuse: 0.7, roughness: 0.5, specular: 0.05 },
-                        lightposition: { x: 200, y: 200, z: 500 }
-                    });
-                });
-            });
-
-            const surfLayout = {
-                title: {
-                    text: 'Group Delay – Vertical',
-                    font: { color: titleColor, size: 14, weight: 'bold' },
-                    x: 0.5, xanchor: 'center'
-                },
-                paper_bgcolor: 'transparent',
-                margin: { t: 52, r: 80, b: 10, l: 10 },
-                scene: {
-                    bgcolor: wallColor,
-                    aspectmode: 'manual',
-                    aspectratio: { x: 1.4, y: 1.0, z: 0.7 },
-                    xaxis: {
-                        title: { text: 'Phi (deg)',               font: { color: textColor, size: 11 } },
-                        color: textColor, tickfont: { color: textColor, size: 10 },
-                        gridcolor: gridColor3, showbackground: true,
-                        backgroundcolor: wallColor, zerolinecolor: wallBorder,
-                        linecolor: wallBorder, showline: true, mirror: true
-                    },
-                    yaxis: {
-                        title: { text: 'Theta (deg)',             font: { color: textColor, size: 11 } },
-                        color: textColor, tickfont: { color: textColor, size: 10 },
-                        gridcolor: gridColor3, showbackground: true,
-                        backgroundcolor: wallColor, zerolinecolor: wallBorder,
-                        linecolor: wallBorder, showline: true, mirror: true
-                    },
-                    zaxis: {
-                        title: { text: 'Group Delay - Vertical (ns)', font: { color: textColor, size: 11 } },
-                        color: textColor, tickfont: { color: textColor, size: 10 },
-                        gridcolor: gridColor3, showbackground: true,
-                        backgroundcolor: wallColor, zerolinecolor: wallBorder,
-                        linecolor: wallBorder, showline: true, mirror: true
-                    },
-                    // Camera matches reference: front-right elevated view
-                    camera: {
-                        eye:    { x: 1.8, y: -1.6, z: 0.8 },
-                        center: { x: 0,   y: 0,    z: -0.1 },
-                        up:     { x: 0,   y: 0,    z: 1 }
-                    }
-                },
-                showlegend: false
-            };
-
-            Plotly.react(
-                'plot-3d-gd',
-                surfTraces.length ? surfTraces : [{ type: 'surface', x: [0], y: [0], z: [[0]] }],
-                surfLayout,
-                { responsive: true }
-            );
-
-
-            attachChartListenersOnce();
-            renderMarkerTable();
-        }
-
-        function attachChartListenersOnce() {
-            if (listenersAttached) return;
-            const linearPlots = ['plot-mag', 'plot-phase', 'plot-gd', 'plot-vswr', 'plot-z'];
-
-            // Sync Logic
-            linearPlots.forEach(id => {
-                const gd = document.getElementById(id);
-                gd.on('plotly_relayout', function (eventData) {
-                    if (isSyncing) return;
-                    if (eventData['xaxis.range[0]'] || eventData['xaxis.autorange']) {
-                        isSyncing = true;
-                        const update = { 'xaxis.range': [eventData['xaxis.range[0]'], eventData['xaxis.range[1]']] };
-                        if (eventData['xaxis.autorange']) update['xaxis.autorange'] = true;
-                        Promise.all(linearPlots.filter(pid => pid !== id).map(pid => Plotly.relayout(pid, update)))
-                            .then(() => { isSyncing = false; });
-                    }
-                });
-            });
-
-            // Marker Click Logic
-            PLOT_DIVS.forEach(id => {
-                const gd = document.getElementById(id);
-                gd.on('plotly_click', function (data) {
-                    const pt = data.points[0];
-                    if (pt.data.name === 'Markers') return;
-
-                    const filename = pt.data.meta?.filename;
-                    const param = pt.data.meta?.param;
-                    if (!filename || !param) return;
-
-                    const ds = AppState.datasets.find(d => d.filename === filename);
-                    if (!ds) return;
-
-                    const comp = computeDerivedData(ds, param);
-
-                    let idx = pt.pointIndex;
-                    if (idx === undefined && pt.customdata) {
-                        const exactFreq = pt.customdata;
-                        idx = comp.f.indexOf(exactFreq);
-                    }
-                    if (idx === undefined || idx === -1) return;
-
-                    addMarker({
-                        id: Date.now().toString().slice(-5),
-                        dataset: filename, param: param,
-                        freqHz: comp.f[idx],
-                        magDb: comp.magDb[idx],
-                        phaseDeg: comp.phaseDeg[idx], vswr: comp.vswr[idx],
-                        gd: comp.gd[idx], zRe: comp.zRe[idx], zIm: comp.zIm[idx],
-                        reS: comp.re[idx], imS: comp.im[idx]
-                    });
-                });
-            });
-
-            listenersAttached = true;
-        }
-
-        function addMarker(m) {
-            AppState.markers.push(m);
-            renderPlots();
-        }
-
-        function removeMarker(id) {
-            AppState.markers = AppState.markers.filter(m => m.id !== id);
-            renderPlots();
-        }
-
-        function renderMarkerTable() {
-            DOM.markerTableBody.innerHTML = '';
-            if (AppState.markers.length === 0) {
-                DOM.markerTableBody.innerHTML = `<tr><td colspan="10" class="text-center text-gray-500">No markers added.</td></tr>`;
-                return;
-            }
-            const fScale = getDynamicFreqScale();
-
-            AppState.markers.forEach(m => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td class="font-mono text-sm">${m.id}</td>
-                    <td>${Utils.escapeHTML(m.dataset)}</td>
-                    <td>${Utils.escapeHTML(m.param)}</td>
-                    <td>${(m.freqHz / fScale.div).toFixed(4)} ${fScale.unit}</td>
-                    <td>${m.magDb.toFixed(3)} dB</td>
-                    <td>${m.phaseDeg.toFixed(2)}°</td>
-                    <td>${m.vswr === Infinity ? '∞' : m.vswr.toFixed(3)}</td>
-                    <td>${m.gd.toFixed(3)} ns</td>
-                    <td>${m.zRe.toFixed(1)} ${m.zIm >= 0 ? '+' : '-'} j${Math.abs(m.zIm).toFixed(1)} Ω</td>
-                    <td><button data-action="remove-marker" data-id="${m.id}" class="text-red-500 hover:text-red-700 font-bold" aria-label="Remove Marker">X</button></td>
-                `;
-                DOM.markerTableBody.appendChild(tr);
-            });
-        }
-
-        function calculateBandwidth() {
-            let rawThreshold = parseFloat(DOM.bwThreshold.value);
-            if (isNaN(rawThreshold) || rawThreshold === 0)
-                return alert('Invalid threshold. Please enter a non-zero value.');
-            const threshold = Math.abs(rawThreshold);
-            const mode      = AppState.bwMode;   // 'passband' | 'returnloss'
-
-            DOM.bwTableBody.innerHTML = '';
-            AppState.bwHighlights = [];
-            let hasResults = false;
-            const fScale = getDynamicFreqScale();
-
-            // Per-type highlight colours
-            const passbandColors = ['rgba(16,185,129,0.25)','rgba(6,182,212,0.25)','rgba(139,92,246,0.25)','rgba(236,72,153,0.25)'];
-            const rlColors       = ['rgba(239,68,68,0.25)', 'rgba(249,115,22,0.25)','rgba(234,179,8,0.25)', 'rgba(168,85,247,0.25)'];
-            let pbIdx = 0, rlIdx = 0;
-
-            // Discover all S-params from visible datasets
-            const visDs = AppState.datasets.filter(d => d.visible);
-            let paramsToProcess;
-            if (AppState.selectedParam !== 'All') {
-                paramsToProcess = [AppState.selectedParam];
-            } else {
-                const allP = new Set();
-                visDs.forEach(ds => Object.keys(ds.data).forEach(k => { if (k.startsWith('S')) allP.add(k); }));
-                paramsToProcess = Array.from(allP).sort();
-            }
-
-            // S11, S22, S33 … = diagonal = reflection
-            const isReflection = p => { const m = p.match(/^S(\d+)(\d+)$/i); return m && m[1] === m[2]; };
-
-            visDs.forEach(ds => {
-                paramsToProcess.forEach(param => {
-                    if (!ds.data[param]) return;
-                    const refl = isReflection(param);
-                    if (mode === 'returnloss' && !refl) return;
-                    if (mode === 'passband'   &&  refl) return;
-
-                    const comp  = computeDerivedData(ds, param);
-                    const magDb = comp.magDb;
-                    const n     = magDb.length;
-                    if (n < 2) return;
-
-                    let pivotIdx = 0, pivotVal, targetVal, rangeCheck;
-
-                    if (mode === 'passband') {
-                        // Find PEAK — region where curve stays within threshold of peak
-                        let maxVal = -Infinity;
-                        for (let i = 0; i < n; i++) { if (magDb[i] > maxVal) { maxVal = magDb[i]; pivotIdx = i; } }
-                        pivotVal  = maxVal;
-                        targetVal = pivotVal - threshold;
-                        rangeCheck = v => v >= targetVal;
-                    } else {
-                        // Find NOTCH — region where return loss stays below (notch + threshold)
-                        let minVal = Infinity;
-                        for (let i = 0; i < n; i++) { if (magDb[i] < minVal) { minVal = magDb[i]; pivotIdx = i; } }
-                        pivotVal  = minVal;
-                        targetVal = pivotVal + threshold;
-                        rangeCheck = v => v <= targetVal;
-                    }
-
-                    let startIdx = pivotIdx;
-                    while (startIdx > 0 && rangeCheck(magDb[startIdx - 1])) startIdx--;
-                    let endIdx = pivotIdx;
-                    while (endIdx < n - 1 && rangeCheck(magDb[endIdx + 1])) endIdx++;
-                    if (startIdx === endIdx) return;
-
-                    hasResults = true;
-                    const fStart = comp.f[startIdx];
-                    const fStop  = comp.f[endIdx];
-                    const bw     = fStop - fStart;
-                    const color  = mode === 'passband'
-                        ? passbandColors[pbIdx++ % passbandColors.length]
-                        : rlColors[rlIdx++ % rlColors.length];
-
-                    AppState.bwHighlights.push({ fStart, fStop, color, param, type: mode === 'passband' ? 'BW/Gain' : 'Return Loss' });
-
-                    const typeLabel  = mode === 'passband' ? '&#x1F4E1; BW / Gain' : '&#x1F501; Return Loss';
-                    const pivotLabel = mode === 'passband'
-                        ? `Peak: ${(comp.f[pivotIdx] / fScale.div).toFixed(4)} ${fScale.unit} (${pivotVal.toFixed(2)} dB)`
-                        : `Notch: ${(comp.f[pivotIdx] / fScale.div).toFixed(4)} ${fScale.unit} (${pivotVal.toFixed(2)} dB)`;
-                    const threshLabel = mode === 'passband' ? `-${threshold} dB from peak` : `+${threshold} dB from notch`;
-
-                    const tr = document.createElement('tr');
-                    tr.innerHTML =
-                        `<td>${Utils.escapeHTML(ds.filename)}</td>` +
-                        `<td class="font-semibold">${Utils.escapeHTML(param)}</td>` +
-                        `<td><span class="inline-block px-2 py-0.5 rounded text-xs font-medium ${
-                            mode === 'passband'
-                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                        }">${typeLabel}</span></td>` +
-                        `<td class="text-xs">${pivotLabel}</td>` +
-                        `<td>${(fStart / fScale.div).toFixed(4)} ${fScale.unit}</td>` +
-                        `<td>${(fStop  / fScale.div).toFixed(4)} ${fScale.unit}</td>` +
-                        `<td class="text-xs text-gray-500">${threshLabel}</td>` +
-                        `<td class="font-bold text-brand-600 dark:text-brand-400">${(bw / fScale.div).toFixed(4)} ${fScale.unit}</td>`;
-                    DOM.bwTableBody.appendChild(tr);
-                });
-            });
-
-            if (!hasResults) DOM.bwTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500">No bandwidth found within threshold.</td></tr>';
-            if (AppState.bwHighlights.length > 0) {
-                DOM.clearBwBtn.classList.remove('hidden');
-                DOM.clearBwBtn.disabled = false;
-            }
-            renderPlots();
-        }
-
-        DOM.clearBwBtn.addEventListener('click', () => {
-            AppState.bwHighlights = [];
-            DOM.bwTableBody.innerHTML = `<tr><td colspan="8" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td></tr>`;
-            DOM.clearBwBtn.classList.add('hidden');
-            renderPlots();
+        const phiAxis=Array.from({length:PHI_COLS},(_,c)=>(c/(PHI_COLS-1))*360);
+        const thetaAxis=Array.from({length:THETA_ROWS},(_,r)=>(r/(THETA_ROWS-1))*180);
+        const zGrid=Array.from({length:THETA_ROWS},()=>new Array(PHI_COLS).fill(null));
+        const wGrid=Array.from({length:THETA_ROWS},()=>new Array(PHI_COLS).fill(0));
+        const pS=360/(PHI_COLS-1), tS=180/(THETA_ROWS-1);
+        pts.forEach(({phi,theta,gd})=>{
+          const ci2=Math.min(PHI_COLS-1,Math.round(phi/pS));
+          const ri=Math.min(THETA_ROWS-1,Math.round(theta/tS));
+          if(zGrid[ri][ci2]===null){zGrid[ri][ci2]=gd;wGrid[ri][ci2]=1;}
+          else{wGrid[ri][ci2]++;zGrid[ri][ci2]+=(gd-zGrid[ri][ci2])/wGrid[ri][ci2];}
         });
-
-        DOM.fileInput.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
-            if (!files.length) return;
-            for (const file of files) {
-                const text = await file.text();
-                try {
-                    AppState.datasets.push(TouchstoneParser.parse(text, file.name));
-                } catch (err) { alert(`Failed to parse ${file.name}`); }
-            }
-            updateControlsState();
-            updateSidebar();
-            updateParamDropdown();
-            renderPlots();
-            DOM.fileInput.value = '';
-        });
-
-        function updateControlsState() {
-            const isEmpty = AppState.datasets.length === 0;
-            DOM.paramSelect.disabled = isEmpty;
-            DOM.freqScaleSelect.disabled = isEmpty;
-            DOM.bwThreshold.disabled = isEmpty;
-            DOM.calcBwBtn.disabled = isEmpty;
-            DOM.clearDataBtn.classList.toggle('hidden', isEmpty);
+        for(let r=0;r<THETA_ROWS;r++){
+          let last=null;
+          for(let c=0;c<PHI_COLS;c++){if(zGrid[r][c]!==null)last=zGrid[r][c];else if(last!==null)zGrid[r][c]=last;}
+          last=null;
+          for(let c=PHI_COLS-1;c>=0;c--){if(zGrid[r][c]!==null)last=zGrid[r][c];else if(last!==null)zGrid[r][c]=last;}
         }
-
-        function updateSidebar() {
-            if (AppState.datasets.length === 0) {
-                DOM.datasetList.innerHTML = `<li class="text-gray-400 italic">No files loaded.</li>`;
-                return;
-            }
-            DOM.datasetList.innerHTML = AppState.datasets.map(d => `
-                <li class="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                    <input type="checkbox" checked data-action="toggle-dataset" data-filename="${Utils.escapeHTML(d.filename)}" class="w-4 h-4 text-brand-600 bg-gray-100 border-gray-300 rounded focus:ring-brand-500 dark:focus:ring-brand-600 dark:ring-offset-gray-800 focus:ring-2 dark:bg-gray-700 dark:border-gray-600 cursor-pointer">
-                    <span class="truncate" title="${Utils.escapeHTML(d.filename)}">${Utils.escapeHTML(d.filename)}</span>
-                    <span class="text-xs text-gray-400 ml-auto flex-shrink-0">(${d.info.numPorts}-port)</span>
-                </li>
-            `).join('');
+        for(let c=0;c<PHI_COLS;c++){
+          let last=null;
+          for(let r=0;r<THETA_ROWS;r++){if(zGrid[r][c]!==null)last=zGrid[r][c];else if(last!==null)zGrid[r][c]=last;}
+          last=null;
+          for(let r=THETA_ROWS-1;r>=0;r--){if(zGrid[r][c]!==null)last=zGrid[r][c];else if(last!==null)zGrid[r][c]=last;}
+          for(let r=0;r<THETA_ROWS;r++){if(zGrid[r][c]===null)zGrid[r][c]=0;}
         }
+        surfTraces.push({
+          type:'surface',name:`${ds.filename} – ${param}`,
+          x:phiAxis,y:thetaAxis,z:zGrid,
+          colorscale:viridis,showscale:true,opacity:1.0,
+          colorbar:{title:{text:'GD (ns)',font:{color:AppState.isDark?'#94a9be':'#2a4a5a',size:10},side:'right'},tickfont:{color:AppState.isDark?'#94a9be':'#2a4a5a',size:9},thickness:14,len:0.7,x:1.01},
+          contours:{x:{highlight:false},y:{highlight:false},z:{highlight:false}},
+          hovertemplate:`<b>${ds.filename} – ${param}</b><br>Phi: %{x:.1f}°<br>Theta: %{y:.1f}°<br>GD: %{z:.3f} ns<extra></extra>`,
+          lighting:{ambient:0.85,diffuse:0.7,roughness:0.5,specular:0.05}
+        });
+      });
+    });
 
-        function updateParamDropdown() {
-            const allParams = new Set();
-            AppState.datasets.forEach(ds => Object.keys(ds.data).forEach(k => { if (k.startsWith('S')) allParams.add(k); }));
-            const currentVal = DOM.paramSelect.value;
-            let options = `<option value="All">All Parameters</option>`;
-            Array.from(allParams).sort().forEach(p => options += `<option value="${p}">${p}</option>`);
-            DOM.paramSelect.innerHTML = options;
-            DOM.paramSelect.value = allParams.has(currentVal) ? currentVal : 'All';
+    // 3D config — must keep modebar for drag-to-rotate
+    const cfg3d = { responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['toImage','sendDataToCloud'], displaylogo: false };
+    const s3Dark   = AppState.isDark;
+    const s3Wall   = s3Dark ? '#0c1219' : '#ffffff';
+    const s3Grid   = s3Dark ? 'rgba(0,212,200,0.12)' : 'rgba(0,150,140,0.15)';
+    const s3Zero   = s3Dark ? 'rgba(0,212,200,0.15)' : 'rgba(0,150,140,0.2)';
+    const s3Axis   = s3Dark ? '#94a9be' : '#2a4a5a';
+    const s3MBbg   = s3Dark ? 'rgba(14,21,32,0.8)' : 'rgba(240,244,248,0.9)';
+    const s3MBcol  = s3Dark ? '#4a7a99' : '#4a6a7a';
+
+    Plotly.react('plot-3d-gd',
+      surfTraces.length ? surfTraces : [{type:'surface',x:[0],y:[0],z:[[0]],showscale:false}],
+      {
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        margin: { t:20, r:70, b:10, l:10 },
+        scene: {
+          bgcolor: s3Wall,
+          aspectmode: 'manual',
+          aspectratio: { x:1.4, y:1.0, z:0.7 },
+          xaxis: {
+            title: { text:'Phi (deg)', font:{color:s3Axis,size:10} },
+            color:s3Axis, tickfont:{color:s3Axis,size:9},
+            gridcolor:s3Grid, showbackground:true,
+            backgroundcolor:s3Wall, zerolinecolor:s3Zero
+          },
+          yaxis: {
+            title: { text:'Theta (deg)', font:{color:s3Axis,size:10} },
+            color:s3Axis, tickfont:{color:s3Axis,size:9},
+            gridcolor:s3Grid, showbackground:true,
+            backgroundcolor:s3Wall, zerolinecolor:s3Zero
+          },
+          zaxis: {
+            title: { text:'Group Delay (ns)', font:{color:s3Axis,size:10} },
+            color:s3Axis, tickfont:{color:s3Axis,size:9},
+            gridcolor:s3Grid, showbackground:true,
+            backgroundcolor:s3Wall, zerolinecolor:s3Zero
+          },
+          camera: { eye:{x:1.8,y:-1.6,z:0.8}, center:{x:0,y:0,z:-0.1}, up:{x:0,y:0,z:1} }
+        },
+        showlegend: false,
+        modebar: { bgcolor:s3MBbg, color:s3MBcol, activecolor:'#00d4c8' }
+      },
+      cfg3d
+    );
+
+    attachChartListenersOnce();
+    renderMarkerTable();
+  }
+
+  /* ══════════════════════════════════════════════════════
+     CHART EVENT LISTENERS
+  ══════════════════════════════════════════════════════ */
+  function attachChartListenersOnce() {
+    if(listenersAttached) return;
+    const linPlots=['plot-mag','plot-phase','plot-gd','plot-vswr','plot-z'];
+    linPlots.forEach(id=>{
+      document.getElementById(id).on('plotly_relayout',ev=>{
+        if(isSyncing) return;
+        if(ev['xaxis.range[0]']||ev['xaxis.autorange']){
+          isSyncing=true;
+          const upd={'xaxis.range':[ev['xaxis.range[0]'],ev['xaxis.range[1]']]};
+          if(ev['xaxis.autorange']) upd['xaxis.autorange']=true;
+          Promise.all(linPlots.filter(p=>p!==id).map(p=>Plotly.relayout(p,upd))).then(()=>{isSyncing=false;});
         }
+      });
+    });
+    PLOT_DIVS.forEach(id=>{
+      document.getElementById(id).on('plotly_click',data=>{
+        const pt=data.points[0];
+        if(pt.data.name==='Markers') return;
+        const filename=pt.data.meta?.filename, param=pt.data.meta?.param;
+        if(!filename||!param) return;
+        const ds=AppState.datasets.find(d=>d.filename===filename);
+        if(!ds) return;
+        const comp=computeDerivedData(ds,param);
+        let idx=pt.pointIndex;
+        if(idx===undefined&&pt.customdata){idx=comp.f.indexOf(pt.customdata);}
+        if(idx===undefined||idx===-1) return;
+        addMarker({id:Date.now().toString().slice(-5),dataset:filename,param,freqHz:comp.f[idx],magDb:comp.magDb[idx],phaseDeg:comp.phaseDeg[idx],vswr:comp.vswr[idx],gd:comp.gd[idx],zRe:comp.zRe[idx],zIm:comp.zIm[idx],reS:comp.re[idx],imS:comp.im[idx]});
+      });
+    });
+    listenersAttached=true;
+  }
 
-        DOM.paramSelect.addEventListener('change', (e) => { AppState.selectedParam = e.target.value; renderPlots(); });
-        DOM.freqScaleSelect.addEventListener('change', (e) => { AppState.freqScaleType = e.target.value; renderPlots(); });
+  function addMarker(m){AppState.markers.push(m);renderPlots();}
+  function removeMarker(id){AppState.markers=AppState.markers.filter(m=>m.id!==id);renderPlots();}
 
-        DOM.clearDataBtn.addEventListener('click', () => {
-            AppState.datasets = []; AppState.markers = []; AppState.bwHighlights = [];
-            updateControlsState();
-            updateSidebar(); updateParamDropdown(); renderMarkerTable();
-            DOM.clearBwBtn.classList.add('hidden');
-            DOM.bwTableBody.innerHTML = `<tr><td colspan="7" class="text-center text-gray-500">Calculate bandwidth from sidebar.</td></tr>`;
-            PLOT_DIVS.forEach(id => Plotly.purge(id));
-            listenersAttached = false;
+  /* ══════════════════════════════════════════════════════
+     MARKER TABLE
+  ══════════════════════════════════════════════════════ */
+  function renderMarkerTable() {
+    DOM.markerTableBody.innerHTML='';
+    if(AppState.markers.length===0){
+      DOM.markerTableBody.innerHTML='<tr><td colspan="10" style="color:#3a5570;text-align:center;padding:14px;">No markers added.</td></tr>';
+      return;
+    }
+    const fS=getDynamicFreqScale();
+    AppState.markers.forEach(m=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td style="color:#00d4c8;">${m.id}</td><td>${Utils.escapeHTML(m.dataset)}</td><td style="color:#f59e0b;">${Utils.escapeHTML(m.param)}</td><td>${(m.freqHz/fS.div).toFixed(4)} ${fS.unit}</td><td>${m.magDb.toFixed(3)}</td><td>${m.phaseDeg.toFixed(2)}°</td><td>${m.vswr===Infinity?'∞':m.vswr.toFixed(3)}</td><td>${m.gd.toFixed(3)} ns</td><td>${m.zRe.toFixed(1)} ${m.zIm>=0?'+':'-'} j${Math.abs(m.zIm).toFixed(1)} Ω</td><td><button data-action="remove-marker" data-id="${m.id}" style="color:#ef4444;cursor:pointer;background:none;border:none;font-size:1rem;line-height:1;" aria-label="Remove">×</button></td>`;
+      DOM.markerTableBody.appendChild(tr);
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════
+     BANDWIDTH CALCULATION
+  ══════════════════════════════════════════════════════ */
+  function calculateBandwidth() {
+    let raw=parseFloat(DOM.bwThreshold.value);
+    if(isNaN(raw)||raw===0) return alert('Invalid threshold. Enter a non-zero dB value.');
+    const threshDrop=Math.abs(raw);
+    const mode=DOM.bwMode.value;
+    DOM.bwTableBody.innerHTML='';
+    AppState.bwHighlights=[]; AppState.rlHighlights=[];
+    let hasResults=false;
+    const fS=getDynamicFreqScale();
+
+    function isReturnLoss(param){const m=param.match(/^S(\d+)(\d+)$/i);return m?m[1]===m[2]:false;}
+    function findRegions(arr,pred){
+      const regs=[];let inR=false,st=0;
+      for(let i=0;i<arr.length;i++){
+        if(pred(arr[i])&&!inR){inR=true;st=i;}
+        else if(!pred(arr[i])&&inR){inR=false;regs.push({start:st,end:i-1});}
+      }
+      if(inR) regs.push({start:st,end:arr.length-1});
+      return regs;
+    }
+    function findBandpassRegion(magDb,td){
+      let pk=-Infinity,pi=0;
+      magDb.forEach((v,i)=>{if(v>pk){pk=v;pi=i;}});
+      const cut=pk-td; let s=pi,e=pi;
+      while(s>0&&magDb[s-1]>=cut)s--;
+      while(e<magDb.length-1&&magDb[e+1]>=cut)e++;
+      return s<e?[{start:s,end:e,refVal:pk,refLabel:`Peak ${pk.toFixed(2)} dB`}]:[];
+    }
+    function findReturnLossRegions(magDb,td){
+      let mx=-Infinity; magDb.forEach(v=>{if(v>mx)mx=v;});
+      const cut=mx-td;
+      return findRegions(magDb,v=>v<=cut).map(r=>({...r,refVal:cut,refLabel:`≤ ${cut.toFixed(2)} dB (${td} dB below ${mx.toFixed(2)} dB)`}));
+    }
+
+    let paramsToProcess;
+    if(AppState.selectedParam!=='All'){paramsToProcess=[AppState.selectedParam];}
+    else{const s=new Set();AppState.datasets.filter(d=>d.visible).forEach(ds=>Object.keys(ds.data).filter(k=>k.startsWith('S')).forEach(k=>s.add(k)));paramsToProcess=Array.from(s).sort();}
+
+    AppState.datasets.filter(d=>d.visible).forEach(ds=>{
+      paramsToProcess.forEach(param=>{
+        if(!ds.data[param]) return;
+        const comp=computeDerivedData(ds,param);
+        const isRL=isReturnLoss(param);
+        let doRL=mode==='auto'?isRL:mode==='rl';
+        let doBW=mode==='auto'?!isRL:mode==='bw';
+        const regions=doRL?findReturnLossRegions(comp.magDb,threshDrop):doBW?findBandpassRegion(comp.magDb,threshDrop):[];
+        regions.forEach(region=>{
+          const {start,end,refLabel}=region;
+          const fStart=comp.f[start],fStop=comp.f[end],bw=fStop-fStart;
+          if(bw<=0) return;
+          hasResults=true;
+          const typeLabel=doRL?'Return Loss':'Transmission BW';
+          const badgeStyle=doRL?'background:rgba(239,68,68,0.15);color:#ef4444;border:1px solid rgba(239,68,68,0.3);':'background:rgba(245,158,11,0.15);color:#f59e0b;border:1px solid rgba(245,158,11,0.3);';
+          if(doRL) AppState.rlHighlights.push({fStart,fStop});
+          else AppState.bwHighlights.push({fStart,fStop});
+          const tr=document.createElement('tr');
+          tr.innerHTML=`<td>${Utils.escapeHTML(ds.filename)}</td><td style="color:#f59e0b;">${Utils.escapeHTML(param)}</td><td><span style="font-family:'JetBrains Mono',monospace;font-size:0.6rem;font-weight:700;padding:2px 7px;border-radius:2px;${badgeStyle}">${typeLabel}</span></td><td style="font-size:0.65rem;">${Utils.escapeHTML(refLabel)}</td><td>${(fStart/fS.div).toFixed(4)} ${fS.unit}</td><td>${(fStop/fS.div).toFixed(4)} ${fS.unit}</td><td>−${threshDrop} dB</td><td style="color:#00d4c8;font-weight:600;">${(bw/fS.div).toFixed(4)} ${fS.unit}</td>`;
+          DOM.bwTableBody.appendChild(tr);
         });
+      });
+    });
+    if(!hasResults) DOM.bwTableBody.innerHTML='<tr><td colspan="8" style="color:#3a5570;text-align:center;padding:14px;">No regions found. Adjust threshold or mode.</td></tr>';
+    if(AppState.bwHighlights.length>0||AppState.rlHighlights.length>0){DOM.clearBwBtn.style.display='';DOM.clearBwBtn.disabled=false;}
+    renderPlots();
+  }
 
-        DOM.resetZoomBtn.addEventListener('click', () => {
-            PLOT_DIVS.filter(id => id !== 'plot-smith').forEach(id => {
-                if (document.getElementById(id).data) {
-                    Plotly.relayout(id, { 'xaxis.autorange': true, 'yaxis.autorange': true });
-                }
-            });
-            if (document.getElementById('plot-smith').data) {
-                Plotly.relayout('plot-smith', {
-                    'smith.realaxis.autorange': true,
-                    'smith.imaginaryaxis.autorange': true
-                });
-            }
-        });
+  /* ══════════════════════════════════════════════════════
+     CONTROLS STATE / SIDEBAR UPDATE
+  ══════════════════════════════════════════════════════ */
+  function updateControlsState() {
+    const empty=AppState.datasets.length===0;
+    DOM.paramSelect.disabled=empty; DOM.freqScaleSelect.disabled=empty;
+    DOM.bwThreshold.disabled=empty; DOM.bwMode.disabled=empty; DOM.calcBwBtn.disabled=empty;
+    DOM.clearDataBtn.hidden=empty;
+  }
 
-        DOM.calcBwBtn.addEventListener('click', calculateBandwidth);
+  function updateSidebar() {
+    DOM.datasetList.innerHTML = '';
+    if (AppState.datasets.length === 0) return;
+    AppState.datasets.forEach(function(d) {
+      var row = document.createElement('div');
+      row.className = 'file-chip';
 
-        // ── Bandwidth mode toggle buttons ──────────────────────────────────────
-        document.querySelectorAll('.bw-mode-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const newMode = btn.dataset.mode;
-                if (AppState.bwMode === newMode) return;
-                AppState.bwMode = newMode;
+      var cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!d.visible;
+      cb.setAttribute('data-action', 'toggle-dataset');
+      cb.setAttribute('data-filename', d.filename);
+      cb.style.width = '12px';
+      cb.style.height = '12px';
+      cb.style.accentColor = '#00d4c8';
+      cb.style.cursor = 'pointer';
+      cb.style.flexShrink = '0';
 
-                // Update button active styles
-                document.querySelectorAll('.bw-mode-btn').forEach(b => {
-                    const active = b.dataset.mode === newMode;
-                    b.classList.toggle('bg-brand-500', active);
-                    b.classList.toggle('text-white',   active);
-                    b.classList.toggle('bg-white',     !active && !document.documentElement.classList.contains('dark'));
-                    b.classList.toggle('dark:bg-gray-600', !active);
-                    b.classList.toggle('text-gray-700', !active);
-                });
+      var nameEl = document.createElement('span');
+      nameEl.className = 'chip-name';
+      nameEl.setAttribute('title', d.filename);
+      nameEl.textContent = d.filename;
 
-                // Update threshold label and hint text
-                const hint  = document.getElementById('bwModeHint');
-                const label = document.getElementById('bwThresholdLabel');
-                if (newMode === 'passband') {
-                    label.textContent = 'Threshold (dB from peak)';
-                    hint.innerHTML = 'Measures <strong>S21/S12/Sij (i\u2260j)</strong> passband: region where magnitude stays within <em>threshold</em> dB of the peak.';
-                    document.getElementById('bwThreshold').value = '3';
-                } else {
-                    label.textContent = 'Threshold (dB from notch)';
-                    hint.innerHTML = 'Measures <strong>S11/S22/Snn</strong> return loss: region where reflection stays within <em>threshold</em> dB of the deepest notch.';
-                    document.getElementById('bwThreshold').value = '3';
-                }
+      var ptsEl = document.createElement('span');
+      ptsEl.className = 'chip-pts';
+      ptsEl.textContent = String(d.data.Freq.length) + ' pts';
 
-                // Clear stale highlights when mode changes
-                AppState.bwHighlights = [];
-                DOM.bwTableBody.innerHTML = '<tr><td colspan="8" class="text-center text-gray-500">Mode changed \u2014 click Calculate &amp; Highlight.</td></tr>';
-                DOM.clearBwBtn.classList.add('hidden');
-                if (AppState.datasets.length > 0) renderPlots();
-            });
-        });
+      row.appendChild(cb);
+      row.appendChild(nameEl);
+      row.appendChild(ptsEl);
+      DOM.datasetList.appendChild(row);
+    });
+  }
 
-        function toggleTheme() {
-            AppState.isDark = !AppState.isDark;
-            document.documentElement.classList.toggle('dark', AppState.isDark);
-            document.getElementById('moonIcon').classList.toggle('hidden', AppState.isDark);
-            document.getElementById('sunIcon').classList.toggle('hidden', !AppState.isDark);
-            if (AppState.datasets.length > 0) renderPlots();
-        }
-        DOM.themeToggle.addEventListener('click', toggleTheme);
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) toggleTheme();
+  function updateParamDropdown() {
+    const s=new Set();
+    AppState.datasets.forEach(ds=>Object.keys(ds.data).forEach(k=>{if(k.startsWith('S'))s.add(k);}));
+    const cur=DOM.paramSelect.value;
+    let opts='<option value="All">All Parameters</option>';
+    Array.from(s).sort().forEach(p=>opts+=`<option value="${p}">${p}</option>`);
+    DOM.paramSelect.innerHTML=opts;
+    DOM.paramSelect.value=s.has(cur)?cur:'All';
+  }
 
-        // Print Logic Handling
-        let wasDarkBeforePrint = false;
+  /* ══════════════════════════════════════════════════════
+     THEME TOGGLE  (light mode accessible)
+  ══════════════════════════════════════════════════════ */
+  function toggleTheme() {
+    AppState.isDark = !AppState.isDark;
+    document.documentElement.classList.toggle('dark', AppState.isDark);
+    document.getElementById('moonIcon').classList.toggle('hidden',  AppState.isDark);
+    document.getElementById('sunIcon').classList.toggle('hidden',  !AppState.isDark);
+    // Always re-render so Plotly chart backgrounds/grid colors update
+    if (AppState.datasets.length > 0) renderPlots();
+  }
 
-        window.addEventListener('beforeprint', () => {
-            wasDarkBeforePrint = AppState.isDark;
-            if (wasDarkBeforePrint) {
-                toggleTheme(); // Temporarily switch to light mode for cleaner printing
-            }
-        });
+  /* ══════════════════════════════════════════════════════
+     EVENT LISTENERS
+  ══════════════════════════════════════════════════════ */
+  DOM.themeToggle.addEventListener('click', toggleTheme);
+  DOM.paramSelect.addEventListener('change', e=>{AppState.selectedParam=e.target.value;renderPlots();});
+  DOM.freqScaleSelect.addEventListener('change', e=>{AppState.freqScaleType=e.target.value;renderPlots();});
+  DOM.calcBwBtn.addEventListener('click', calculateBandwidth);
 
-        window.addEventListener('afterprint', () => {
-            if (wasDarkBeforePrint && !AppState.isDark) {
-                toggleTheme(); // Restore user's preferred theme
-            }
-        });
+  DOM.bwMode.addEventListener('change',()=>{
+    const m=DOM.bwMode.value;
+    if(m==='rl'){DOM.bwThresholdLabel.textContent='Return Loss threshold (dB drop from baseline)';if(DOM.bwThreshold.value==='-3')DOM.bwThreshold.value='-10';}
+    else if(m==='bw'){DOM.bwThresholdLabel.textContent='Passband threshold (dB below peak)';if(DOM.bwThreshold.value==='-10')DOM.bwThreshold.value='-3';}
+    else DOM.bwThresholdLabel.textContent='Threshold (dB) — applied per param type';
+  });
 
-        DOM.printBtn.addEventListener('click', () => {
-            window.print();
-        });
+  DOM.clearBwBtn.addEventListener('click',()=>{
+    AppState.bwHighlights=[];AppState.rlHighlights=[];
+    DOM.bwTableBody.innerHTML='<tr><td colspan="8" style="color:#3a5570;text-align:center;padding:14px;">Calculate bandwidth from sidebar.</td></tr>';
+    DOM.clearBwBtn.style.display='none';renderPlots();
+  });
 
-        // Event Delegation for dynamic elements
-        DOM.datasetList.addEventListener('change', (e) => {
-            if (e.target.dataset.action === 'toggle-dataset') {
-                const ds = AppState.datasets.find(d => d.filename === e.target.dataset.filename);
-                if (ds) { ds.visible = !ds.visible; renderPlots(); }
-            }
-        });
+  // ── File processing — shared by click + drag-drop ──────────────────────
+  async function processFiles(files) {
+    var loaded = 0;
+    var skipped = [];
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
+      // Deduplicate: skip if filename already loaded
+      if (AppState.datasets.some(function(d) { return d.filename === file.name; })) {
+        skipped.push(file.name);
+        continue;
+      }
+      try {
+        var text = await file.text();
+        AppState.datasets.push(TouchstoneParser.parse(text, file.name));
+        loaded++;
+      } catch(err) {
+        alert('Failed to parse: ' + file.name);
+      }
+    }
+    if (skipped.length > 0) {
+      alert('Already loaded (skipped):\n' + skipped.join('\n'));
+    }
+    if (loaded > 0) {
+      updateControlsState();
+      updateSidebar();
+      updateParamDropdown();
+      renderPlots();
+    }
+    DOM.fileInput.value = '';
+  }
 
-        DOM.markerTableBody.addEventListener('click', (e) => {
-            const btn = e.target.closest('button[data-action="remove-marker"]');
-            if (btn) {
-                removeMarker(btn.dataset.id);
-            }
-        });
+  // Click on drop zone → open file picker
+  document.getElementById('dropZone').addEventListener('click', function() {
+    DOM.fileInput.click();
+  });
+  document.getElementById('dropZone').addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); DOM.fileInput.click(); }
+  });
 
-        document.querySelectorAll('.fullscreen-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                const targetId = btn.getAttribute('data-target');
-                const parent = btn.parentElement;
-                const isFull = parent.classList.toggle('fullscreen-active');
-                btn.innerHTML = isFull ? '✖' : '⛶';
-                setTimeout(() => { Plotly.Plots.resize(targetId); }, 50);
-            });
-        });
+  // Drag-and-drop on drop zone
+  var dropZoneEl = document.getElementById('dropZone');
+  dropZoneEl.addEventListener('dragenter', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    dropZoneEl.classList.add('drag-over');
+  });
+  dropZoneEl.addEventListener('dragover', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    e.dataTransfer.dropEffect = 'copy';
+    dropZoneEl.classList.add('drag-over');
+  });
+  dropZoneEl.addEventListener('dragleave', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    dropZoneEl.classList.remove('drag-over');
+  });
+  dropZoneEl.addEventListener('drop', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    dropZoneEl.classList.remove('drag-over');
+    var files = e.dataTransfer.files;
+    if (files.length > 0) processFiles(files);
+  });
 
-        window.addEventListener('resize', () => {
-            PLOT_DIVS.forEach(id => { if (document.getElementById(id).data) Plotly.Plots.resize(id); });
-        });
+  // Also allow dragging anywhere on the sidebar
+  var sidebarEl = document.getElementById('appSidebar');
+  sidebarEl.addEventListener('dragover', function(e) { e.preventDefault(); });
+  sidebarEl.addEventListener('drop', function(e) {
+    e.preventDefault(); e.stopPropagation();
+    dropZoneEl.classList.remove('drag-over');
+    var files = e.dataTransfer.files;
+    if (files.length > 0) processFiles(files);
+  });
 
-        // Initializer
+  // File input change (fallback for click-to-browse)
+  DOM.fileInput.addEventListener('change', function(e) {
+    if (e.target.files.length > 0) processFiles(e.target.files);
+  });
+
+  DOM.clearDataBtn.addEventListener('click',()=>{
+    AppState.datasets=[];AppState.markers=[];AppState.bwHighlights=[];AppState.rlHighlights=[];
+    updateControlsState();updateSidebar();updateParamDropdown();renderMarkerTable();
+    DOM.clearBwBtn.style.display='none';
+    DOM.bwTableBody.innerHTML='<tr><td colspan="8" style="color:#3a5570;text-align:center;padding:14px;">Calculate bandwidth from sidebar.</td></tr>';
+    PLOT_DIVS.forEach(id=>Plotly.purge(id));
+    listenersAttached=false;
+  });
+
+  DOM.resetZoomBtn.addEventListener('click',()=>{
+    ['plot-mag','plot-phase','plot-gd','plot-vswr','plot-z'].forEach(id=>{
+      if(document.getElementById(id).data) Plotly.relayout(id,{'xaxis.autorange':true,'yaxis.autorange':true});
+    });
+  });
+
+  // Dataset toggle delegation
+  DOM.datasetList.addEventListener('change',e=>{
+    if(e.target.dataset.action==='toggle-dataset'){
+      const ds=AppState.datasets.find(d=>d.filename===e.target.dataset.filename);
+      if(ds){ds.visible=!ds.visible;renderPlots();}
+    }
+  });
+
+  // Marker table remove delegation
+  DOM.markerTableBody.addEventListener('click',e=>{
+    const btn=e.target.closest('button[data-action="remove-marker"]');
+    if(btn) removeMarker(btn.dataset.id);
+  });
+
+  // Fullscreen buttons
+  document.querySelectorAll('.fullscreen-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const targetId=btn.getAttribute('data-target');
+      const parent=btn.parentElement;
+      const isFull=parent.classList.toggle('fullscreen-active');
+      btn.textContent=isFull?'✖':'⛶';
+      setTimeout(()=>Plotly.Plots.resize(targetId),50);
+    });
+  });
+
+  window.addEventListener('resize',()=>{
+    PLOT_DIVS.forEach(id=>{if(document.getElementById(id).data)Plotly.Plots.resize(id);});
+  });
+
+  // ── Demo data — pre-loaded on startup ──────────────────────────────────
+  // ── Load demo files from same folder on startup ──────────────────────
+  (function loadDemoFiles() {
+    var FILES = ['bpf1.s2p', 'bpf2.s2p'];
+    Promise.all(FILES.map(function(name) {
+      return fetch(name)
+        .then(function(r) {
+          if (!r.ok) throw new Error(name + ' not found');
+          return r.text().then(function(txt) { return { name: name, txt: txt }; });
+        })
+        .catch(function(e) { console.warn(e.message); return null; });
+    })).then(function(results) {
+      results.forEach(function(res) {
+        if (!res) return;
+        try {
+          AppState.datasets.push(TouchstoneParser.parse(res.txt, res.name));
+        } catch(e) { console.warn('Parse failed:', res.name, e); }
+      });
+      if (AppState.datasets.length > 0) {
         updateControlsState();
-
-    </script>
+        updateSidebar();
+        updateParamDropdown();
+        renderPlots();
+      }
+    });
+  })();
+</script>
 </body>
-
 </html>
