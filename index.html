@@ -113,6 +113,34 @@
   }
   .fullscreen-btn:hover { color: #00d4c8; }
 
+  /* ── Smith Chart toggle pills (admittance / VSWR) ───── */
+  .smith-toggle {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    padding: 2px 7px;
+    border-radius: 2px;
+    border: 1px solid rgba(0,212,200,0.25);
+    background: transparent;
+    color: #6b8fa8;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .smith-toggle:hover     { border-color: rgba(0,212,200,0.5); color: #00d4c8; }
+  .smith-toggle[data-on="true"] {
+    background: rgba(0,212,200,0.15);
+    border-color: #00d4c8;
+    color: #00d4c8;
+  }
+  html:not(.dark) .smith-toggle             { color: #4a6a7a; border-color: rgba(0,180,170,0.3); }
+  html:not(.dark) .smith-toggle:hover       { color: #007a75; border-color: rgba(0,180,170,0.6); }
+  html:not(.dark) .smith-toggle[data-on="true"] {
+    background: rgba(0,180,170,0.12);
+    border-color: #007a75;
+    color: #007a75;
+  }
+
   /* ── Fullscreen overlay ──────────────────────── */
   .fullscreen-active {
     position: fixed !important;
@@ -599,7 +627,13 @@
 
     <!-- Smith Chart -->
     <div class="chart-card">
-      <div class="chart-label">Smith Chart</div>
+      <div class="chart-label" style="justify-content:space-between;">
+        <span style="display:flex;align-items:center;gap:8px;">Smith Chart</span>
+        <span style="display:flex;align-items:center;gap:4px;margin-right:28px;">
+          <button id="smithToggleAdm"  class="smith-toggle" data-on="false" title="Toggle admittance grid">Y-GRID</button>
+          <button id="smithToggleVSWR" class="smith-toggle" data-on="false" title="Toggle constant-VSWR circles">VSWR</button>
+        </span>
+      </div>
       <button class="fullscreen-btn" data-target="plot-smith" aria-label="Toggle Fullscreen">⛶</button>
       <div id="plot-smith" class="chart-container"></div>
     </div>
@@ -660,6 +694,362 @@
 
 <script>
   /* ══════════════════════════════════════════════════════
+     SMITH CHART — pure-SVG renderer
+     Replaces Plotly's scattersmith. Adapted from the
+     drawing approach used by 28raining/smith-chart (d3+SVG)
+     but rewritten as a vanilla-JS module that fits this app's
+     state/marker/theme pipeline.
+
+     Maths (standard convention, unit-disk in Γ-plane):
+       Γ        = (z - 1) / (z + 1),  z = (R + jX) / Z0
+       const-R  → circle, center (r/(r+1), 0), radius 1/(r+1)
+       const-X  → arc on circle, center (1, 1/x),  radius 1/|x|
+       const-G  → impedance grid rotated 180° (admittance)
+       const-|Γ|→ centered circle of radius (VSWR-1)/(VSWR+1)
+  ══════════════════════════════════════════════════════ */
+  const SmithChartRenderer = (function(){
+    const NS   = 'http://www.w3.org/2000/svg';
+    const VIEW = 1000;                     // logical viewBox span (square)
+    const R    = 460;                      // chart radius in viewBox units
+    const R_VALS    = [0.2, 0.5, 1, 2, 5]; // constant-resistance circles
+    const X_VALS    = [0.2, 0.5, 1, 2, 5]; // constant-reactance arcs (drawn ±)
+    const VSWR_VALS = [1.5, 2, 3];         // VSWR circles
+
+    const state = {
+      isDark: true, Z0: 50,
+      showAdmittance: false, showVSWR: false,
+      svg: null, hoverGroup: null,
+      flatPoints: [],                       // [{re,im,freqHz,filename,param,color}, ...]
+      onPointClick: null
+    };
+
+    function el(tag, attrs, parent) {
+      const e = document.createElementNS(NS, tag);
+      for (const k in attrs) {
+        if (k === 'text') e.textContent = attrs[k];
+        else e.setAttribute(k, attrs[k]);
+      }
+      if (parent) parent.appendChild(e);
+      return e;
+    }
+
+    const toSvg   = (gx, gy) => [gx * R, -gy * R];   // chart→svg (flip Y)
+    const fromSvg = (sx, sy) => [sx / R, -sy / R];
+
+    function formatFreq(hz){
+      if (hz >= 1e9) return [(hz/1e9).toFixed(4),'GHz'];
+      if (hz >= 1e6) return [(hz/1e6).toFixed(4),'MHz'];
+      if (hz >= 1e3) return [(hz/1e3).toFixed(4),'kHz'];
+      return [hz.toFixed(2),'Hz'];
+    }
+
+    /* ─── Grid drawing ───────────────────────────────────────── */
+    function drawGrid(svg) {
+      const dark   = state.isDark;
+      const minor  = dark ? 'rgba(0,212,200,0.13)' : 'rgba(0,150,140,0.22)';
+      const major  = dark ? 'rgba(0,212,200,0.32)' : 'rgba(0,150,140,0.45)';
+      const out    = dark ? 'rgba(0,212,200,0.7)'  : 'rgba(0,150,140,0.8)';
+      const labelC = dark ? '#6b8fa8'             : '#4a6a7a';
+      const admC   = dark ? 'rgba(245,158,11,0.32)': 'rgba(245,158,11,0.5)';
+      const vswrC  = dark ? 'rgba(239,68,68,0.45)' : 'rgba(220,38,38,0.6)';
+      const g = el('g', { fill:'none' }, svg);
+
+      /* outer boundary + horizontal axis */
+      el('circle', { cx:0, cy:0, r:R, stroke:out, 'stroke-width':2.2 }, g);
+      el('line',   { x1:-R, y1:0, x2:R, y2:0, stroke:major, 'stroke-width':0.8 }, g);
+
+      /* constant-R circles (impedance) */
+      R_VALS.forEach(r => {
+        const cx  = r/(r+1), rad = 1/(r+1);
+        const [sx, sy] = toSvg(cx, 0);
+        const isMain = (r === 1);
+        el('circle', {
+          cx:sx, cy:sy, r:rad*R,
+          stroke: isMain ? major : minor,
+          'stroke-width': isMain ? 1.1 : 0.7
+        }, g);
+      });
+
+      /* constant-X arcs — both signs */
+      X_VALS.forEach(xMag => {
+        [+xMag, -xMag].forEach(x => {
+          const rad = 1/Math.abs(x);
+          const theta = 2 * Math.atan(x);
+          const endX = Math.cos(theta), endY = Math.sin(theta);
+          const [sx0, sy0] = toSvg(1, 0);
+          const [sx1, sy1] = toSvg(endX, endY);
+          /* In SVG (Y flipped), arcs with center above (x>0, cy=1/x>0) curve into upper-half. */
+          const sweep = x > 0 ? 0 : 1;
+          const isMain = (Math.abs(x) === 1);
+          el('path', {
+            d:`M ${sx0} ${sy0} A ${rad*R} ${rad*R} 0 0 ${sweep} ${sx1} ${sy1}`,
+            stroke: isMain ? major : minor,
+            'stroke-width': isMain ? 1.1 : 0.7
+          }, g);
+        });
+      });
+
+      /* optional admittance grid (resistance/reactance rotated 180°) */
+      if (state.showAdmittance) {
+        R_VALS.forEach(rv => {
+          const cx = -rv/(rv+1), rad = 1/(rv+1);
+          const [sx, sy] = toSvg(cx, 0);
+          el('circle', { cx:sx, cy:sy, r:rad*R, stroke:admC, 'stroke-width':0.6,
+                         'stroke-dasharray':'3 3' }, g);
+        });
+        X_VALS.forEach(xMag => {
+          [+xMag, -xMag].forEach(x => {
+            const rad = 1/Math.abs(x);
+            const theta = 2 * Math.atan(x);
+            const endX = -Math.cos(theta), endY = -Math.sin(theta);
+            const [sx0, sy0] = toSvg(-1, 0);
+            const [sx1, sy1] = toSvg(endX, endY);
+            const sweep = x > 0 ? 1 : 0;
+            el('path', {
+              d:`M ${sx0} ${sy0} A ${rad*R} ${rad*R} 0 0 ${sweep} ${sx1} ${sy1}`,
+              stroke: admC, 'stroke-width': 0.6, 'stroke-dasharray':'3 3'
+            }, g);
+          });
+        });
+      }
+
+      /* optional VSWR circles */
+      if (state.showVSWR) {
+        VSWR_VALS.forEach(vswr => {
+          const gMag = (vswr - 1) / (vswr + 1);
+          el('circle', { cx:0, cy:0, r:gMag*R, stroke:vswrC, 'stroke-width':1,
+                         'stroke-dasharray':'6 4' }, g);
+          el('text', { x:0, y:-gMag*R - 6, fill:vswrC,
+                       'text-anchor':'middle', 'font-size':16,
+                       'font-family':"'JetBrains Mono', monospace",
+                       'font-weight':600, text:`VSWR ${vswr}` }, g);
+        });
+      }
+
+      /* resistance labels along real axis */
+      R_VALS.forEach(r => {
+        const x = (r - 1) / (r + 1);                /* Γ at z=r+j0 */
+        const [sx /*sy*/] = toSvg(x, 0);
+        el('text', { x:sx, y:20, fill:labelC,
+                     'text-anchor':'middle', 'font-size':14,
+                     'font-family':"'JetBrains Mono', monospace",
+                     text:String(r) }, g);
+      });
+      /* endpoints: short (0) on left, open (∞) on right */
+      el('text', { x:-R-6, y:5, fill:labelC, 'text-anchor':'end',
+                   'font-size':12, 'font-family':"'JetBrains Mono', monospace",
+                   text:'0' }, g);
+      el('text', { x: R+6, y:5, fill:labelC, 'text-anchor':'start',
+                   'font-size':12, 'font-family':"'JetBrains Mono', monospace",
+                   text:'∞' }, g);
+
+      return g;
+    }
+
+    /* ─── Trace drawing ──────────────────────────────────────── */
+    function drawTraces(svg, traces, legendCol) {
+      const g = el('g', { fill:'none' }, svg);
+      const legendEntries = [];
+      traces.forEach(t => {
+        if (!t.visible || !t.re || t.re.length < 1) return;
+        let d = '';
+        let prevInside = false;
+        t.re.forEach((re, i) => {
+          const im = t.im[i];
+          const [sx, sy] = toSvg(re, im);
+          /* clip points that escape the unit disk — keeps the path inside */
+          const inside = (re*re + im*im) <= 1.001;
+          d += (i === 0 || !prevInside ? ' M ' : ' L ') + sx + ' ' + sy;
+          prevInside = inside;
+        });
+        el('path', {
+          d, stroke:t.color, 'stroke-width':1.6, 'stroke-linejoin':'round'
+        }, g);
+        const [sx0, sy0] = toSvg(t.re[0], t.im[0]);
+        const last = t.re.length - 1;
+        const [sx1, sy1] = toSvg(t.re[last], t.im[last]);
+        /* start marker = filled, end marker = hollow */
+        el('circle', { cx:sx0, cy:sy0, r:5, fill:t.color }, g);
+        el('circle', { cx:sx1, cy:sy1, r:5, fill:'none', stroke:t.color,
+                       'stroke-width':1.8 }, g);
+        legendEntries.push({ color:t.color, label:`${t.filename} · ${t.param}` });
+      });
+      /* legend at the bottom */
+      if (legendEntries.length) {
+        const ly = R + 30;
+        const xStep = Math.min(260, Math.floor(VIEW / Math.max(1, legendEntries.length)));
+        const startX = -((legendEntries.length - 1) * xStep) / 2;
+        legendEntries.forEach((e, i) => {
+          const lx = startX + i*xStep;
+          el('line', { x1:lx - xStep/2 + 8, y1:ly, x2:lx - xStep/2 + 28, y2:ly,
+                       stroke:e.color, 'stroke-width':2.5 }, g);
+          const labelText = e.label.length > 30 ? e.label.slice(0,28)+'…' : e.label;
+          el('text', { x:lx - xStep/2 + 34, y:ly + 4, fill:legendCol,
+                       'font-size':14, 'font-family':"'JetBrains Mono', monospace",
+                       text:labelText }, g);
+        });
+      }
+      return g;
+    }
+
+    function drawMarkers(svg, markers) {
+      const g = el('g', {}, svg);
+      markers.forEach(m => {
+        if (typeof m.reS !== 'number' || typeof m.imS !== 'number') return;
+        const [sx, sy] = toSvg(m.reS, m.imS);
+        el('path', {
+          d:`M ${sx-9} ${sy-9} L ${sx+9} ${sy+9} M ${sx-9} ${sy+9} L ${sx+9} ${sy-9}`,
+          stroke:'#ef4444', 'stroke-width':3, 'stroke-linecap':'round', fill:'none'
+        }, g);
+      });
+      return g;
+    }
+
+    /* ─── Hover crosshair + tooltip ─────────────────────────── */
+    function attachHover(svg, hoverGroup) {
+      const dark = state.isDark;
+      const bg     = dark ? '#0e1520'              : '#ffffff';
+      const stroke = dark ? 'rgba(0,212,200,0.45)' : 'rgba(0,150,140,0.55)';
+      const txt    = dark ? '#c8d6e8'              : '#1a2332';
+      const subtle = dark ? '#6b8fa8'              : '#4a6a7a';
+
+      const pts = state.flatPoints;
+      if (pts.length === 0) return;
+
+      function nearest(chartX, chartY) {
+        let best = null, bestDist = Infinity;
+        for (const p of pts) {
+          const d = (p.re - chartX)**2 + (p.im - chartY)**2;
+          if (d < bestDist) { bestDist = d; best = p; }
+        }
+        return [best, bestDist];
+      }
+
+      function mouseToChart(ev) {
+        const pt = svg.createSVGPoint();
+        pt.x = ev.clientX; pt.y = ev.clientY;
+        const m = svg.getScreenCTM();
+        if (!m) return null;
+        const p = pt.matrixTransform(m.inverse());
+        return fromSvg(p.x, p.y);
+      }
+
+      svg.addEventListener('mousemove', ev => {
+        const c = mouseToChart(ev); if (!c) return;
+        const [chartX, chartY] = c;
+        /* Don't hover outside the unit disk + small margin */
+        if (chartX*chartX + chartY*chartY > 1.15) {
+          hoverGroup.innerHTML = '';
+          return;
+        }
+        const [best /*,bestD*/] = nearest(chartX, chartY);
+        if (!best) return;
+        hoverGroup.innerHTML = '';
+
+        const [sx, sy] = toSvg(best.re, best.im);
+        /* halo + crosshair */
+        el('circle', { cx:sx, cy:sy, r:9, fill:'none', stroke:best.color,
+                       'stroke-width':2, opacity:0.9 }, hoverGroup);
+        el('circle', { cx:sx, cy:sy, r:3, fill:best.color }, hoverGroup);
+
+        /* Compute Z, VSWR, |Γ|dB from Γ = best.re + j*best.im */
+        const gr = best.re, gi = best.im;
+        const denom = (1-gr)*(1-gr) + gi*gi;
+        const zRe = ((1+gr)*(1-gr) - gi*gi) / denom * state.Z0;
+        const zIm = (2*gi) / denom * state.Z0;
+        const gMag = Math.sqrt(gr*gr + gi*gi);
+        const vswr = gMag >= 1 ? Infinity : (1+gMag)/(1-gMag);
+        const gDb  = 20*Math.log10(gMag + 1e-15);
+        const [fStr, fU] = formatFreq(best.freqHz);
+
+        const lines = [
+          { c:best.color, t:`${best.filename} · ${best.param}` },
+          { c:subtle,     t:`f      ${fStr} ${fU}` },
+          { c:txt,        t:`Z      ${zRe.toFixed(2)} ${zIm>=0?'+':'-'} j${Math.abs(zIm).toFixed(2)} Ω` },
+          { c:txt,        t:`VSWR   ${vswr===Infinity?'∞':vswr.toFixed(3)}` },
+          { c:txt,        t:`|Γ|    ${gDb.toFixed(2)} dB` }
+        ];
+        const boxW = 280, boxH = lines.length * 22 + 12;
+        /* place tooltip — flip side if it'd go off the chart */
+        let tx = sx + 18, ty = sy - boxH - 8;
+        if (tx + boxW > VIEW/2 - 10) tx = sx - boxW - 18;
+        if (ty < -VIEW/2 + 10) ty = sy + 18;
+
+        el('rect', { x:tx, y:ty, width:boxW, height:boxH,
+                     fill:bg, stroke:stroke, 'stroke-width':1, rx:4, opacity:0.96 },
+                   hoverGroup);
+        lines.forEach((ln, i) => {
+          el('text', { x:tx + 10, y:ty + 22 + i*22, fill:ln.c,
+                       'font-size':15, 'font-family':"'JetBrains Mono', monospace",
+                       'font-weight':(i===0?600:400), text:ln.t }, hoverGroup);
+        });
+      });
+
+      svg.addEventListener('mouseleave', () => { hoverGroup.innerHTML = ''; });
+
+      svg.addEventListener('click', ev => {
+        if (!state.onPointClick) return;
+        const c = mouseToChart(ev); if (!c) return;
+        const [chartX, chartY] = c;
+        const [best, bestDist] = nearest(chartX, chartY);
+        /* require click within a generous radius — same UX as plotly_click */
+        if (best && bestDist < 0.05) {
+          state.onPointClick(best.filename, best.param, best.freqHz);
+        }
+      });
+    }
+
+    /* ─── Public API ─────────────────────────────────────────── */
+    function render(container, traces, markers, opts) {
+      opts = opts || {};
+      state.isDark      = (opts.isDark !== false);
+      state.Z0          = opts.Z0 || 50;
+      state.onPointClick = opts.onPointClick || null;
+      if (typeof opts.showAdmittance === 'boolean') state.showAdmittance = opts.showAdmittance;
+      if (typeof opts.showVSWR       === 'boolean') state.showVSWR       = opts.showVSWR;
+
+      /* Flatten visible points for hover */
+      state.flatPoints = [];
+      traces.forEach(t => {
+        if (!t.visible) return;
+        const n = t.re.length;
+        for (let i=0; i<n; i++) {
+          state.flatPoints.push({
+            re:t.re[i], im:t.im[i], freqHz:t.freqHz[i],
+            filename:t.filename, param:t.param, color:t.color
+          });
+        }
+      });
+
+      container.innerHTML = '';
+      /* viewBox is slightly taller than wide to accommodate the legend below */
+      const svg = el('svg', {
+        viewBox: `${-VIEW/2 - 10} ${-VIEW/2 - 10} ${VIEW + 20} ${VIEW + 80}`,
+        preserveAspectRatio: 'xMidYMid meet',
+        style: 'width:100%;height:100%;display:block;cursor:crosshair;'
+      });
+      state.svg = svg;
+
+      drawGrid(svg);
+      const legendCol = state.isDark ? '#94a9be' : '#4a6a7a';
+      drawTraces(svg, traces, legendCol);
+      drawMarkers(svg, markers);
+      const hoverGroup = el('g', { 'pointer-events':'none' }, svg);
+      state.hoverGroup = hoverGroup;
+      attachHover(svg, hoverGroup);
+
+      container.appendChild(svg);
+    }
+
+    function clear(container) {
+      container.innerHTML = '';
+      state.flatPoints = [];
+    }
+
+    return { render, clear };
+  })();
+
+  /* ══════════════════════════════════════════════════════
      APP STATE
   ══════════════════════════════════════════════════════ */
   const AppState = {
@@ -670,6 +1060,8 @@
     bwHighlights: [],
     rlHighlights: [],
     isDark: true,
+    showAdmittance: false,
+    showVSWR: false,
     colorPalette: ['#00d4c8','#f59e0b','#8b5cf6','#10b981','#ef4444','#60a5fa','#fb923c','#a78bfa']
   };
 
@@ -866,7 +1258,8 @@
   function renderPlots() {
     const freqScale=getDynamicFreqScale();
     const xTitle=`Frequency (${freqScale.unit})`;
-    const traces={mag:[],phase:[],gd:[],vswr:[],z:[],smith:[]};
+    const traces={mag:[],phase:[],gd:[],vswr:[],z:[]};
+    const smithTraces = [];     // own structure for the SVG Smith Chart
     let ci=0;
     const paramsToRender=AppState.selectedParam==='All'?null:AppState.selectedParam;
 
@@ -885,7 +1278,11 @@
         traces.gd.push({...base,y:comp.gd});
         traces.vswr.push({...base,y:comp.vswr});
         traces.z.push({...base,y:comp.zRe.map((re,i)=>MathUtils.cMag(re,comp.zIm[i]))});
-        traces.smith.push({type:'scattersmith',real:comp.re,imag:comp.im,name,marker:{color,size:2},line:{color}});
+        smithTraces.push({
+          filename: ds.filename, param,
+          color, visible: true,
+          re: comp.re, im: comp.im, freqHz: comp.f
+        });
         ci++;
       });
     });
@@ -899,8 +1296,6 @@
       traces.gd.push(mt(AppState.markers.map(m=>m.gd)));
       traces.vswr.push(mt(AppState.markers.map(m=>m.vswr===Infinity?null:m.vswr)));
       traces.z.push(mt(AppState.markers.map(m=>MathUtils.cMag(m.zRe,m.zIm))));
-      traces.smith.push({type:'scattersmith',real:AppState.markers.map(m=>m.reS),imag:AppState.markers.map(m=>m.imS),
-        mode:'markers',marker:{color:'#ff4444',size:8,symbol:'cross'},showlegend:false});
     }
 
     const layouts={
@@ -931,21 +1326,19 @@
     Plotly.react('plot-vswr',  traces.vswr,  layouts.vswr,  cfg);
     Plotly.react('plot-z',     traces.z,     layouts.z,     cfg);
 
-    // Smith Chart
-    const smDark = AppState.isDark;
-    Plotly.react('plot-smith', traces.smith, {
-      paper_bgcolor:'transparent', plot_bgcolor:'transparent',
-      margin:{t:32,r:16,b:40,l:20},
-      font:{family:"'JetBrains Mono',monospace",color:smDark?'#6b8fa8':'#4a6a7a',size:10},
-      smith:{
-        realaxis:{gridcolor:smDark?'rgba(0,212,200,0.15)':'rgba(0,150,140,0.2)'},
-        imaginaryaxis:{gridcolor:smDark?'rgba(0,212,200,0.1)':'rgba(0,150,140,0.15)'}
-      },
-      showlegend:true,
-      legend:{orientation:'h',y:-0.15,font:{color:smDark?'#4a7a99':'#4a6a7a',size:9,family:"'JetBrains Mono',monospace"},bgcolor:'transparent'},
-      hovermode:'closest',
-      hoverlabel:{bgcolor:smDark?'#0e1520':'#ffffff',bordercolor:smDark?'rgba(0,212,200,0.4)':'rgba(0,150,140,0.4)',font:{family:"'JetBrains Mono',monospace",color:smDark?'#c8d6e8':'#1a2332',size:10}}
-    }, cfg);
+    // Smith Chart — custom SVG renderer (replaces Plotly scattersmith)
+    SmithChartRenderer.render(
+      document.getElementById('plot-smith'),
+      smithTraces,
+      AppState.markers,
+      {
+        isDark: AppState.isDark,
+        Z0: smithTraces.length ? (AppState.datasets.find(d=>d.visible)?.info?.z0 || 50) : 50,
+        showAdmittance: AppState.showAdmittance,
+        showVSWR:       AppState.showVSWR,
+        onPointClick: handleSmithPointClick
+      }
+    );
 
     // ── 3D Surface ──────────────────────────────────────────────────────────
     const surfTraces=[];
@@ -1068,6 +1461,7 @@
       });
     });
     PLOT_DIVS.forEach(id=>{
+      if (id === 'plot-smith') return;          // Smith chart is now SVG; clicks handled inside the renderer
       document.getElementById(id).on('plotly_click',data=>{
         const pt=data.points[0];
         if(pt.data.name==='Markers') return;
@@ -1083,6 +1477,23 @@
       });
     });
     listenersAttached=true;
+  }
+
+  /* Smith-chart click → add a marker (mirrors the Plotly-click flow on other charts) */
+  function handleSmithPointClick(filename, param, freqHz) {
+    const ds = AppState.datasets.find(d => d.filename === filename);
+    if (!ds) return;
+    const comp = computeDerivedData(ds, param);
+    const idx = comp.f.indexOf(freqHz);
+    if (idx === -1) return;
+    addMarker({
+      id: Date.now().toString().slice(-5),
+      dataset: filename, param, freqHz: comp.f[idx],
+      magDb: comp.magDb[idx], phaseDeg: comp.phaseDeg[idx],
+      vswr: comp.vswr[idx], gd: comp.gd[idx],
+      zRe: comp.zRe[idx], zIm: comp.zIm[idx],
+      reS: comp.re[idx],  imS: comp.im[idx]
+    });
   }
 
   function addMarker(m){AppState.markers.push(m);renderPlots();}
@@ -1244,6 +1655,41 @@
      EVENT LISTENERS
   ══════════════════════════════════════════════════════ */
   DOM.themeToggle.addEventListener('click', toggleTheme);
+
+  /* Smith Chart overlay toggles (admittance grid, VSWR circles) */
+  (function wireSmithToggles() {
+    const admBtn  = document.getElementById('smithToggleAdm');
+    const vswrBtn = document.getElementById('smithToggleVSWR');
+    function setBtn(btn, on) { btn.setAttribute('data-on', on ? 'true' : 'false'); }
+    function rerenderSmith() {
+      if (AppState.datasets.length > 0) {
+        renderPlots();                                        // full re-render so traces refresh too
+      } else {
+        SmithChartRenderer.render(                            // empty grid only
+          document.getElementById('plot-smith'), [], [],
+          { isDark: AppState.isDark,
+            showAdmittance: AppState.showAdmittance,
+            showVSWR:       AppState.showVSWR });
+      }
+    }
+    admBtn.addEventListener('click', () => {
+      AppState.showAdmittance = !AppState.showAdmittance;
+      setBtn(admBtn, AppState.showAdmittance);
+      rerenderSmith();
+    });
+    vswrBtn.addEventListener('click', () => {
+      AppState.showVSWR = !AppState.showVSWR;
+      setBtn(vswrBtn, AppState.showVSWR);
+      rerenderSmith();
+    });
+
+    /* Paint an empty Smith Chart grid on page load so the card isn't blank
+       while waiting for data. Real traces overwrite this once data arrives. */
+    SmithChartRenderer.render(
+      document.getElementById('plot-smith'), [], [],
+      { isDark: AppState.isDark }
+    );
+  })();
   DOM.paramSelect.addEventListener('change', e=>{AppState.selectedParam=e.target.value;renderPlots();});
   DOM.freqScaleSelect.addEventListener('change', e=>{AppState.freqScaleType=e.target.value;renderPlots();});
   DOM.calcBwBtn.addEventListener('click', calculateBandwidth);
@@ -1342,7 +1788,10 @@
     updateControlsState();updateSidebar();updateParamDropdown();renderMarkerTable();
     DOM.clearBwBtn.style.display='none';
     DOM.bwTableBody.innerHTML='<tr><td colspan="8" style="color:#3a5570;text-align:center;padding:14px;">Calculate bandwidth from sidebar.</td></tr>';
-    PLOT_DIVS.forEach(id=>Plotly.purge(id));
+    PLOT_DIVS.forEach(id => {
+      if (id === 'plot-smith') SmithChartRenderer.clear(document.getElementById(id));
+      else Plotly.purge(id);
+    });
     listenersAttached=false;
   });
 
@@ -1373,7 +1822,10 @@
       const parent=btn.parentElement;
       const isFull=parent.classList.toggle('fullscreen-active');
       btn.textContent=isFull?'✖':'⛶';
-      setTimeout(()=>Plotly.Plots.resize(targetId),50);
+      /* Smith chart is pure SVG with preserveAspectRatio — auto-resizes; only Plotly divs need a nudge */
+      if (targetId !== 'plot-smith') {
+        setTimeout(()=>Plotly.Plots.resize(targetId),50);
+      }
     });
   });
 
@@ -1384,26 +1836,63 @@
   // ── Demo data — pre-loaded on startup ──────────────────────────────────
   // ── Load demo files from same folder on startup ──────────────────────
   (function loadDemoFiles() {
+
+    // Render an inline hint just below the drop-zone. Used to explain
+    // *why* the demo data didn't appear, instead of failing silently.
+    function showHint(msg) {
+      var hint = document.createElement('div');
+      hint.id = 'demoLoadHint';
+      hint.style.cssText =
+        'margin-top:10px;padding:8px 10px;border-radius:3px;' +
+        'background:rgba(245,158,11,0.08);' +
+        'border:1px solid rgba(245,158,11,0.3);' +
+        "font-family:'JetBrains Mono',monospace;" +
+        'font-size:0.58rem;line-height:1.5;color:#f59e0b;';
+      hint.textContent = msg;
+      var dz = document.getElementById('dropZone');
+      if (dz && !document.getElementById('demoLoadHint')) {
+        dz.insertAdjacentElement('afterend', hint);
+      }
+    }
+
+    // file:// blocks fetch() in every modern browser. If the user
+    // opened index.html by double-clicking, auto-load can't run —
+    // tell them, and bail out cleanly.
+    if (location.protocol === 'file:') {
+      showHint('Demo auto-load skipped: opening index.html via file:// ' +
+               'blocks fetch() in all browsers. Serve the folder with a ' +
+               'local HTTP server (e.g. python -m http.server) or host ' +
+               'it (GitHub Pages works). You can still drag-drop a .s2p ' +
+               'file into the box above.');
+      return;
+    }
+
     var FILES = ['bpf1.s2p', 'bpf2.s2p'];
     Promise.all(FILES.map(function(name) {
       return fetch(name)
         .then(function(r) {
-          if (!r.ok) throw new Error(name + ' not found');
+          if (!r.ok) throw new Error(name + ' not found (' + r.status + ')');
           return r.text().then(function(txt) { return { name: name, txt: txt }; });
         })
         .catch(function(e) { console.warn(e.message); return null; });
     })).then(function(results) {
+      var loaded = 0;
       results.forEach(function(res) {
         if (!res) return;
         try {
           AppState.datasets.push(TouchstoneParser.parse(res.txt, res.name));
+          loaded++;
         } catch(e) { console.warn('Parse failed:', res.name, e); }
       });
-      if (AppState.datasets.length > 0) {
+      if (loaded > 0) {
         updateControlsState();
         updateSidebar();
         updateParamDropdown();
         renderPlots();
+      } else {
+        // Server is up but the demo files aren't next to index.html.
+        showHint('Demo files (bpf1.s2p, bpf2.s2p) not found alongside ' +
+                 'index.html. Drag-drop any .s2p file to get started.');
       }
     });
   })();
